@@ -1,0 +1,17 @@
+__pycache__/
+*.pyc
+.DS_Store
+.venv/
+.venv311/
+.env
+logs/
+*.log
+Final_Dataset_Civic/
+data_download_papers_strategies/downloaded_papers/
+data_download_papers_strategies/downloaded_papers_elsevier_api/
+data_download_papers_strategies/downloaded_papers_remaining/
+data_download_papers_strategies/institutional_papers/
+data_download_papers_strategies/pmc_papers/
+failed_paper_manual_download/
+.cursor/
+
