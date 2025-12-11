@@ -18,7 +18,6 @@ from .extraction_tools import (
     increment_iteration,
 )
 from .normalization_tools import (
-    normalize_extractions,
     finalize_extraction,
     get_tier2_coverage,
 )
@@ -52,7 +51,6 @@ def create_civic_tools_server():
             increment_iteration,
             
             # Normalization
-            normalize_extractions,
             finalize_extraction,
             get_tier2_coverage,
         ]
@@ -75,7 +73,6 @@ __all__ = [
     "get_draft_extractions",
     "increment_iteration",
     # Normalization tools
-    "normalize_extractions",
     "finalize_extraction",
     "get_tier2_coverage",
 ]

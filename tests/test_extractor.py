@@ -26,7 +26,19 @@ async def run_extractor_test(paper_json_path):
     
     # 2. Setup Context
     context = CIViCContext()
-    context.load_paper(saved_data['paper_id'])
+    try:
+        context.load_paper(saved_data['paper_id'])
+    except Exception as e:
+        print(f"⚠️ Could not load paper folder: {e}")
+        from context.state import PaperInfo
+        context.paper = PaperInfo(
+            paper_id=saved_data['paper_id'], 
+            author="Unknown",
+            year="2025",
+            num_pages=10,
+            pdf_path="mock.pdf"
+        )
+        print("   Using Mock PaperInfo.")
     
     # Inject saved content
     context.paper_content = saved_data['paper_content']

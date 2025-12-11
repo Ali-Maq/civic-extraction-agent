@@ -1,0 +1,78 @@
+{
+  "paper_id": "00065_Wernig_2008",
+  "evidence_items": [
+    {
+      "feature_names": [
+        "JAK2"
+      ],
+      "variant_names": [
+        "V617F"
+      ],
+      "disease_name": "Polycythemia Vera",
+      "evidence_type": "PREDICTIVE",
+      "evidence_level": "D",
+      "evidence_direction": "SUPPORTS",
+      "evidence_significance": "SENSITIZES",
+      "evidence_description": "TG101348, a selective JAK2 inhibitor with IC50 ~3 nM, demonstrated therapeutic efficacy in a murine model of JAK2V617F-induced polycythemia vera with statistically significant reduction in hematocrit and leukocyte count, dose-dependent reduction/elimination of extramedullary hematopoiesis, and evidence of myelofibrosis attenuation.",
+      "therapy_names": [
+        "TG101348"
+      ],
+      "source_page_numbers": "Abstract",
+      "verbatim_quote": "TG101348, a selective small-molecule inhibitor of JAK2 with an in vitro IC50 of ~3 nM, shows therapeutic efficacy in a murine model of myeloproliferative disease induced by the JAK2V617F mutation. In treated animals, there was a statistically significant reduction in hematocrit and leukocyte count, a dose-dependent reduction/elimination of extramedullary hematopoiesis, and, at least in some instances, evidence for attenuation of myelofibrosis.",
+      "extraction_confidence": 0.95,
+      "extraction_reasoning": "This is actionable PREDICTIVE evidence because it describes how JAK2V617F mutation predicts response to TG101348 therapy in polycythemia vera. The evidence shows therapeutic efficacy with specific clinical outcomes (reduced hematocrit, leukocyte count, extramedullary hematopoiesis). Level D because it is preclinical (murine model) evidence.",
+      "variant_origin": "SOMATIC",
+      "representative_results": "Statistically significant reduction in hematocrit and leukocyte count; dose-dependent reduction/elimination of extramedullary hematopoiesis; JAK2V617F disease burden reduction assessed by quantitative genomic PCR; suppression of endogenous erythroid colony formation; in vivo inhibition of JAK-STAT signaling",
+      "gene_entrez_id": "3717",
+      "disease_efo_id": "EFO_0002429",
+      "therapy_ncit_id": "NCIT:C88293",
+      "therapy_rxcui": "2197490",
+      "therapy_safety_profile": {
+        "top_adverse_events": [
+          {
+            "term": "VITAMIN B1 DECREASED",
+            "count": 32
+          },
+          {
+            "term": "VITAMIN B1 DEFICIENCY",
+            "count": 22
+          },
+          {
+            "term": "SPLENOMEGALY",
+            "count": 19
+          },
+          {
+            "term": "ANAEMIA",
+            "count": 12
+          },
+          {
+            "term": "DEATH",
+            "count": 12
+          }
+        ],
+        "source": "FAERS/OpenFDA"
+      }
+    },
+    {
+      "feature_names": [
+        "JAK2"
+      ],
+      "variant_names": [
+        "V617F"
+      ],
+      "disease_name": "Polycythemia Vera",
+      "evidence_type": "DIAGNOSTIC",
+      "evidence_level": "D",
+      "evidence_direction": "SUPPORTS",
+      "evidence_significance": "POSITIVE",
+      "evidence_description": "JAK2V617F mutation is diagnostic for polycythemia vera and can be quantified by genomic PCR to assess disease burden. In a murine model of JAK2V617F-induced polycythemia vera, treatment responses correlated with reduction/elimination of JAK2V617F disease burden assessed by quantitative genomic PCR.",
+      "source_page_numbers": "Abstract",
+      "verbatim_quote": "In vivo responses were correlated with surrogate endpoints, including reduction/elimination of JAK2V617F disease burden assessed by quantitative genomic PCR",
+      "extraction_confidence": 0.9,
+      "extraction_reasoning": "This is actionable DIAGNOSTIC evidence because JAK2V617F serves as a diagnostic marker for polycythemia vera that can be quantitatively measured by genomic PCR. The ability to measure and track disease burden using this variant makes it clinically actionable for diagnosis and monitoring. Level D because it is preclinical evidence from a murine model.",
+      "variant_origin": "SOMATIC",
+      "gene_entrez_id": "3717",
+      "disease_efo_id": "EFO_0002429"
+    }
+  ]
+}

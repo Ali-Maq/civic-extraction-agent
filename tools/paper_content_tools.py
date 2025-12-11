@@ -88,9 +88,15 @@ async def save_paper_content(args: Dict[str, Any]) -> Dict[str, Any]:
     # Log
     logger.info(f"[READER] Paper content saved: {title}")
     logger.info(f"[READER]   Type: {paper_type}")
-    logger.info(f"[READER]   Tables: {len(tables)}")
-    logger.info(f"[READER]   Figures: {len(figures)}")
-    logger.info(f"[READER]   Statistics: {len(statistics)}")
+    
+    # Ensure we log item counts, not character counts of strings
+    t_count = len(tables) if isinstance(tables, list) else 0
+    f_count = len(figures) if isinstance(figures, list) else 0
+    s_count = len(statistics) if isinstance(statistics, list) else 0
+    
+    logger.info(f"[READER]   Tables: {t_count}")
+    logger.info(f"[READER]   Figures: {f_count}")
+    logger.info(f"[READER]   Statistics: {s_count}")
     logger.info(f"[READER]   Genes: {genes}")
     logger.info(f"[READER]   Variants: {variants}")
     

@@ -189,6 +189,15 @@ async def save_evidence_items(args: dict[str, Any]) -> dict[str, Any]:
             "content": [{"type": "text", "text": "Warning: No items provided. Saving empty list."}]
         }
     
+    # DEBUG TRACE for Normalization fields
+    if items and isinstance(items[0], dict):
+        print(f"DEBUG: save_evidence_items received {len(items)} items")
+        print(f"DEBUG: Item 0 keys: {list(items[0].keys())}")
+        if "gene_entrez_ids" in items[0]:
+            print(f"DEBUG: Item 0 gene_entrez_ids: {items[0].get('gene_entrez_ids')}")
+        else:
+            print("DEBUG: Item 0 MISSING gene_entrez_ids")
+
     # Validate each item
     validation_summary = []
     for i, item in enumerate(items):

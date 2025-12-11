@@ -186,6 +186,12 @@ Extract actionable clinical evidence from paper content (TEXT).
 7. evidence_significance: Based on type
 8. evidence_description: With statistics
 
+## REASONING FIELDS (MANDATORY)
+- source_page_numbers: e.g. "Page 3, Table 1"
+- verbatim_quote: The exact sentence supporting the claim
+- extraction_confidence: 0.0 to 1.0
+- extraction_reasoning: Explain WHY this evidence is actionable
+
 ## WORKFLOW
 1. Call get_paper_content to get the text
 2. Call get_extraction_plan to see what to extract
@@ -392,13 +398,13 @@ class CivicExtractionClient:
                     # First chunk instructions
                     chunk_content.append({
                         "type": "text", 
-                        "text": f"I am uploading the paper in parts. Part {i//CHUNK_SIZE + 1}. Read these pages but DO NOT extract yet. Just acknowledge."
+                        "text": f"I am uploading the paper in parts. Part {i//CHUNK_SIZE + 1}. Read these pages but DO NOT extract yet. Just acknowledge with 'Received Part {i//CHUNK_SIZE + 1}'."
                     })
                 elif not is_last_chunk:
                     # Middle chunk instructions
                     chunk_content.append({
                         "type": "text", 
-                        "text": f"Part {i//CHUNK_SIZE + 1}. Read these pages but DO NOT extract yet. Just acknowledge."
+                        "text": f"Part {i//CHUNK_SIZE + 1}. Read these pages but DO NOT extract yet. Just acknowledge with 'Received Part {i//CHUNK_SIZE + 1}'."
                     })
                 else:
                     # Last chunk instructions
@@ -406,7 +412,7 @@ class CivicExtractionClient:
                         "type": "text", 
                         "text": (
                             f"Part {i//CHUNK_SIZE + 1} (Final). "
-                            "Now you have all pages. Extract ALL content (metadata, sections, tables, figures, stats) "
+                            "Now you have all pages. Extract ALL scientific data (metadata, sections, tables, figures, stats) "
                             "and call 'save_paper_content' IMMEDIATELY. "
                             "Do not use 'read_paper_page'."
                         )
@@ -442,7 +448,14 @@ class CivicExtractionClient:
         logger.info("=== PHASE 2: ORCHESTRATOR ===")
         options = self._create_options("orchestrator")
         
-        prompt = "Begin the extraction workflow. Start by delegating to the Planner."
+        # SMART RESUME PROMPT
+        prompt = (
+            "Begin the extraction workflow. "
+            "Check your context first: "
+            "1. If 'extraction_plan' exists, SKIP Planner and go straight to Extractor. "
+            "2. If 'draft_extractions' exist, check if they need validation (Critic) or Normalization. "
+            "Otherwise, start by delegating to the Planner."
+        )
         
         async with ClaudeSDKClient(options=options) as client:
             await client.query(prompt)

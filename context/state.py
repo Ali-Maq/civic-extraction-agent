@@ -122,11 +122,11 @@ class ExtractionState:
              # So this method might be redundant if tools do it directly.
              pass
         else:
-            self.paper_context_text = paper_content.to_context_document()
-            
-            # Also update paper_info with extracted metadata
-            if self.paper_info:
-                self.paper_info.paper_type = paper_content.paper_type
+        self.paper_context_text = paper_content.to_context_document()
+        
+        # Also update paper_info with extracted metadata
+        if self.paper_info:
+            self.paper_info.paper_type = paper_content.paper_type
     
     def get_context_for_agents(self) -> str:
         """
