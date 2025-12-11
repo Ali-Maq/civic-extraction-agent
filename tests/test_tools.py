@@ -31,11 +31,11 @@ class TestExtractionTools:
             "extraction_notes": "Phase III trial"
         }
         
-        result = asyncio.run(save_extraction_plan(plan_args))
+        result = asyncio.run(save_extraction_plan.handler(plan_args))
         assert "Plan saved" in result["content"][0]["text"]
         
         # Get plan
-        result = asyncio.run(get_extraction_plan({}))
+        result = asyncio.run(get_extraction_plan.handler({}))
         content = json.loads(result["content"][0]["text"])
         
         assert content["paper_type"] == "PRIMARY"
@@ -64,7 +64,7 @@ class TestExtractionTools:
             }
         ]
         
-        result = asyncio.run(save_evidence_items({"items": items}))
+        result = asyncio.run(save_evidence_items.handler({"items": items}))
         content = json.loads(result["content"][0]["text"])
         
         assert content["saved"] == 1
@@ -90,7 +90,7 @@ class TestExtractionTools:
             "summary": "Minor fixes needed"
         }
         
-        result = asyncio.run(save_critique(critique_args))
+        result = asyncio.run(save_critique.handler(critique_args))
         content = json.loads(result["content"][0]["text"])
         
         assert content["assessment"] == "NEEDS_REVISION"
@@ -104,28 +104,34 @@ class TestNormalizationTools:
     
     def test_gene_lookup(self):
         """Test gene Entrez ID lookup."""
-        from tools.normalization_tools import lookup_gene_entrez_id
+        from tools.normalization_tools import lookup_gene_entrez
+        import asyncio
         
-        result = lookup_gene_entrez_id("EGFR")
+        # Test tool handler
+        result = asyncio.run(lookup_gene_entrez.handler({"gene_symbol": "EGFR"}))
+        content = json.loads(result["content"][0]["text"])
         
         # May fail if API is down, so check structure
-        assert "found" in result
-        if result["found"]:
-            assert result["gene_entrez_id"] == 1956  # EGFR Entrez ID
+        assert "found" in content
+        if content["found"]:
+            assert content["gene_entrez_id"] == "1956"  # EGFR Entrez ID
     
     def test_disease_lookup(self):
         """Test disease DOID lookup."""
-        from tools.normalization_tools import lookup_disease_doid
+        from tools.normalization_tools import lookup_disease_doid_tool
+        import asyncio
         
-        result = lookup_disease_doid("lung cancer")
+        result = asyncio.run(lookup_disease_doid_tool.handler({"disease_name": "lung cancer"}))
+        content = json.loads(result["content"][0]["text"])
         
-        assert "found" in result
-        if result["found"]:
-            assert "DOID" in result.get("disease_doid", "")
+        assert "found" in content
+        if content["found"]:
+            assert "DOID" in content.get("disease_doid", "")
     
-    def test_normalize_single_item(self):
+    def test_normalize_evidence_item(self):
         """Test normalizing a single evidence item."""
-        from tools.normalization_tools import normalize_single_item
+        from tools.normalization_tools import normalize_evidence_item_async
+        import asyncio
         
         item = {
             "feature_names": "BRAF",
@@ -134,7 +140,7 @@ class TestNormalizationTools:
             "therapy_names": "Vemurafenib"
         }
         
-        normalized = normalize_single_item(item)
+        normalized = asyncio.run(normalize_evidence_item_async(item))
         
         # Check normalization metadata was added
         assert "_normalization" in normalized
@@ -166,10 +172,18 @@ class TestContextManagement:
     
     def test_extraction_state_reset(self):
         """Test extraction state reset."""
-        from context.state import ExtractionState
+        from context.state import ExtractionState, ExtractionPlan
         
         state = ExtractionState()
-        state.extraction_plan = {"paper_type": "PRIMARY"}
+        state.extraction_plan = ExtractionPlan(
+            paper_type="PRIMARY", 
+            expected_items=1,
+            key_variants=[],
+            key_therapies=[],
+            key_diseases=[],
+            focus_sections=[],
+            extraction_notes=""
+        )
         state.draft_extractions = [{"test": "item"}]
         state.iteration_count = 2
         

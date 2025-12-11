@@ -21,6 +21,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 from config import OUTPUTS_DIR, PAPERS_DIR
 from context import CIViCContext, set_current_context
+from context.state import ExtractionPlan
 from hooks.logging_hooks import (
     start_new_log_session, clear_tool_usage_log, logger
 )
@@ -98,24 +99,116 @@ async def run_extraction(paper_id: str, papers_dir: str = None, verbose: bool = 
     # Initialize Client
     client = CivicExtractionClient(verbose=verbose)
     
-    try:
-        # Phase 1: Reader
+    # Check for Reader Checkpoint
+    checkpoint_dir = Path(OUTPUTS_DIR) / "checkpoints" / paper_id
+    reader_checkpoint = checkpoint_dir / "01_reader_output.json"
+    
+    loaded_from_checkpoint = False
+    
+    if reader_checkpoint.exists():
         if verbose:
-            print("\n--- Phase 1: Reader (Image Processing) ---")
-        await client.run_reader_phase()
+            print(f"\n--- Phase 1: Reader (SKIPPED - Found Checkpoint) ---")
+            print(f"Loading from: {reader_checkpoint}")
         
-        # Verify content was extracted
-        if not context.paper_content:
-            raise RuntimeError("Reader agent failed to save paper content.")
+        try:
+            with open(reader_checkpoint, "r") as f:
+                checkpoint_data = json.load(f)
+                
+            context.paper_content = checkpoint_data.get("paper_content")
+            context.paper_content_text = checkpoint_data.get("paper_content_text", "")
             
-        if verbose:
-            print(f"✓ Extracted content: {len(context.paper_content.get('statistics', []))} stats, {len(context.paper_content.get('tables', []))} tables")
-        
-        # Phase 2: Orchestrator
+            # Re-generate text if missing from checkpoint but content exists
+            if not context.paper_content_text and context.paper_content:
+                from tools.paper_content_tools import _generate_paper_context_text
+                context.paper_content_text = _generate_paper_context_text(context.paper_content)
+                
+            if context.paper_content:
+                loaded_from_checkpoint = True
+                logger.info("Loaded Reader output from checkpoint")
+                
+                if verbose:
+                    stats = context.paper_content.get('statistics', [])
+                    tables = context.paper_content.get('tables', [])
+                    print(f"✓ Loaded {len(stats)} stats, {len(tables)} tables")
+
+                # Check for Planner Checkpoint (02)
+                planner_checkpoint = checkpoint_dir / "02_planner_output.json"
+                if planner_checkpoint.exists():
+                    try:
+                        with open(planner_checkpoint, "r") as f:
+                            data = json.load(f)
+                            if "plan" in data:
+                                context.state.extraction_plan = ExtractionPlan(**data["plan"])
+                                if verbose:
+                                    print(f"✓ Loaded Extraction Plan from checkpoint")
+                    except Exception as e:
+                        logger.warning(f"Failed to load planner checkpoint: {e}")
+
+                # Check for Extractor Checkpoint (03)
+                extractor_checkpoint = checkpoint_dir / "03_extractor_output.json"
+                if extractor_checkpoint.exists():
+                    try:
+                        with open(extractor_checkpoint, "r") as f:
+                            data = json.load(f)
+                            # Handle structure: {"extraction": {"draft_extractions": [...]}}
+                            drafts = data.get("extraction", {}).get("draft_extractions", [])
+                            if drafts:
+                                context.state.draft_extractions = drafts
+                                if verbose:
+                                    print(f"✓ Loaded {len(drafts)} draft items from checkpoint")
+                    except Exception as e:
+                        logger.warning(f"Failed to load extractor checkpoint: {e}")
+
+            else:
+                logger.warning("Checkpoint found but missing content. Re-running Reader.")
+                
+        except Exception as e:
+            logger.error(f"Failed to load checkpoint: {e}. Re-running Reader.")
+
+    if not loaded_from_checkpoint:
+        try:
+            # Phase 1: Reader
+            if verbose:
+                print("\n--- Phase 1: Reader (Image Processing) ---")
+            await client.run_reader_phase()
+            
+            # Verify content was extracted
+            if not context.paper_content:
+                raise RuntimeError("Reader agent failed to save paper content.")
+                
+            if verbose:
+                stats = context.paper_content.get('statistics', [])
+                tables = context.paper_content.get('tables', [])
+                print(f"✓ Extracted content: {len(stats)} stats, {len(tables)} tables")
+            
+            # SAVE CHECKPOINT
+            try:
+                checkpoint_dir.mkdir(parents=True, exist_ok=True)
+                checkpoint_data = {
+                    "paper_id": paper_id,
+                    "timestamp": datetime.now().isoformat(),
+                    "paper_content": context.paper_content,
+                    "paper_content_text": context.paper_content_text,
+                }
+                with open(reader_checkpoint, "w") as f:
+                    json.dump(checkpoint_data, f, indent=2, default=str)
+                logger.info(f"Saved Reader checkpoint to {reader_checkpoint}")
+            except Exception as e:
+                logger.error(f"Failed to save checkpoint: {e}")
+
+        except Exception as e:
+            import traceback
+            logger.error(f"Extraction error: {e}")
+            if verbose:
+                traceback.print_exc()
+            return {"error": str(e), "paper_id": paper_id}
+            
+    # Phase 2: Orchestrator
+    try:
         if verbose:
             print("\n--- Phase 2: Orchestrator (Text Analysis) ---")
         await client.run_orchestrator_phase()
-        
+    
     except Exception as e:
         import traceback
         logger.error(f"Extraction error: {e}")
@@ -133,7 +226,7 @@ async def run_extraction(paper_id: str, papers_dir: str = None, verbose: bool = 
             "author": context.paper.author,
             "year": context.paper.year,
             "num_pages": context.paper.num_pages,
-            "paper_type": context.state.extraction_plan.get("paper_type") if context.state.extraction_plan else None
+            "paper_type": context.state.extraction_plan.paper_type if context.state.extraction_plan else None
         },
         "extraction": {
             "items": len(items),
@@ -141,7 +234,7 @@ async def run_extraction(paper_id: str, papers_dir: str = None, verbose: bool = 
             "complete": context.state.is_complete,
             "evidence_items": items
         },
-        "plan": context.state.extraction_plan,
+        "plan": context.state.extraction_plan.__dict__ if context.state.extraction_plan else None,
         "final_critique": context.state.critique,
         "paper_content": getattr(context, 'paper_content', None),
         "timing": {

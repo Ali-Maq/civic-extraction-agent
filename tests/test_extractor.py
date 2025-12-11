@@ -36,6 +36,22 @@ async def run_extractor_test(paper_json_path):
     # Inject saved Plan (if available) or create a dummy one
     if 'plan' in saved_data and saved_data['plan']:
         plan_data = saved_data['plan']
+        
+        # Sanitize list fields
+        for field in ["key_variants", "key_therapies", "key_diseases", "focus_sections"]:
+            val = plan_data.get(field)
+            if isinstance(val, str):
+                # Try to parse or split
+                if val.startswith("[") and val.endswith("]"):
+                    try:
+                        plan_data[field] = json.loads(val)
+                    except:
+                        plan_data[field] = [s.strip() for s in val.strip("[]").split(',')]
+                else:
+                    plan_data[field] = [s.strip() for s in val.split(',')]
+            elif not val:
+                plan_data[field] = []
+                
         context.state.extraction_plan = ExtractionPlan(
             paper_type=plan_data.get('paper_type', 'UNKNOWN'),
             expected_items=plan_data.get('expected_items', 0),
@@ -69,7 +85,6 @@ async def run_extractor_test(paper_json_path):
     server = build_civic_mcp_server()
     
     options = ClaudeAgentOptions(
-        model=DEFAULT_MODEL,
         system_prompt=EXTRACTOR_AGENT.prompt,
         mcp_servers={"civic_tools": server},
         allowed_tools=EXTRACTOR_AGENT.tools,
@@ -94,8 +109,28 @@ async def run_extractor_test(paper_json_path):
     
     # Check extractions
     if context.state.draft_extractions:
-        print(f"✅ Extracted {len(context.state.draft_extractions)} items:")
-        print(json.dumps(context.state.draft_extractions, indent=2))
+        print(f"✅ Extracted {len(context.state.draft_extractions)} items.")
+        
+        # Save Checkpoint
+        from config import OUTPUTS_DIR
+        paper_id = saved_data['paper_id']
+        checkpoint_dir = OUTPUTS_DIR / "checkpoints" / paper_id
+        checkpoint_dir.mkdir(parents=True, exist_ok=True)
+        
+        checkpoint_path = checkpoint_dir / "03_extractor_output.json"
+        
+        # Merge previous state with new extractions
+        output_data = saved_data.copy()
+        output_data['extraction'] = {
+            "draft_extractions": context.state.draft_extractions
+        }
+        
+        with open(checkpoint_path, "w") as f:
+            json.dump(output_data, f, indent=2)
+            
+        print(f"💾 Checkpoint saved: {checkpoint_path}")
+        print(f"➡️  Next step: Run Critic (test_critic.py - to be implemented)")
+        
     else:
         print("❌ No items extracted.")
 

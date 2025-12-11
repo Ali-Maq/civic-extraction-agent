@@ -33,6 +33,17 @@ from tools.normalization_tools import (
     normalize_extractions,
     finalize_extraction,
     get_tier2_coverage,
+    lookup_rxnorm,
+    lookup_efo,
+    lookup_safety_profile,
+    # New granular tools
+    lookup_gene_entrez,
+    lookup_variant_info_tool,
+    lookup_therapy_ncit,
+    lookup_disease_doid_tool,
+    lookup_clinical_trial,
+    lookup_hpo,
+    lookup_pmcid,
 )
 
 
@@ -57,6 +68,17 @@ def build_civic_mcp_server():
             normalize_extractions,
             finalize_extraction,
             get_tier2_coverage,
+            lookup_rxnorm,
+            lookup_efo,
+            lookup_safety_profile,
+            # New granular tools
+            lookup_gene_entrez,
+            lookup_variant_info_tool,
+            lookup_therapy_ncit,
+            lookup_disease_doid_tool,
+            lookup_clinical_trial,
+            lookup_hpo,
+            lookup_pmcid,
         ],
     )
 
@@ -83,4 +105,15 @@ ORCHESTRATOR_AND_SUBAGENT_TOOLS = [
     "mcp__civic_tools__normalize_extractions",
     "mcp__civic_tools__finalize_extraction",
     "mcp__civic_tools__get_tier2_coverage",
+    # Normalizer tools
+    "mcp__civic_tools__lookup_rxnorm",
+    "mcp__civic_tools__lookup_efo",
+    "mcp__civic_tools__lookup_safety_profile",
+    "mcp__civic_tools__lookup_gene_entrez",
+    "mcp__civic_tools__lookup_variant_info_tool",
+    "mcp__civic_tools__lookup_therapy_ncit",
+    "mcp__civic_tools__lookup_disease_doid_tool",
+    "mcp__civic_tools__lookup_clinical_trial",
+    "mcp__civic_tools__lookup_hpo",
+    "mcp__civic_tools__lookup_pmcid",
 ]

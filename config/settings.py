@@ -18,16 +18,24 @@ load_dotenv()
 # =============================================================================
 
 # Base directory is the project root (parent of config/)
-BASE_DIR = Path(__file__).parent.parent
+BASE_DIR = Path(__file__).resolve().parent.parent
+
+def _get_abs_path(env_var: str, default_path: Path) -> Path:
+    """Ensure path is absolute, resolving relative paths against BASE_DIR."""
+    val = os.getenv(env_var)
+    if val:
+        p = Path(val)
+        return p if p.is_absolute() else BASE_DIR / p
+    return default_path
 
 # Data paths (from environment or defaults)
-PAPERS_DIR = Path(os.getenv("PAPERS_DIR", BASE_DIR / "data" / "papers"))
-GROUND_TRUTH_PATH = Path(os.getenv(
+PAPERS_DIR = _get_abs_path("PAPERS_DIR", BASE_DIR / "data" / "papers")
+GROUND_TRUTH_PATH = _get_abs_path(
     "GROUND_TRUTH_PATH", 
     BASE_DIR / "data" / "ground_truth" / "all_combined_extracted_data_refined.xlsx"
-))
-OUTPUTS_DIR = Path(os.getenv("OUTPUTS_DIR", BASE_DIR / "outputs"))
-LOGS_DIR = Path(os.getenv("LOGS_DIR", BASE_DIR / "logs"))
+)
+OUTPUTS_DIR = _get_abs_path("OUTPUTS_DIR", BASE_DIR / "outputs")
+LOGS_DIR = _get_abs_path("LOGS_DIR", BASE_DIR / "logs")
 
 # Ensure output directories exist
 OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)

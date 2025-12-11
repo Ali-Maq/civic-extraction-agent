@@ -1,0 +1,50 @@
+{
+  "paper_id": "00085_Hodi_2013",
+  "evidence_items": [
+    {
+      "feature_names": "KIT",
+      "gene_entrez_ids": "3815",
+      "variant_names": "KIT Mutation",
+      "disease_name": "Melanoma",
+      "disease_efo_id": "EFO_0002617",
+      "evidence_type": "PREDICTIVE",
+      "evidence_level": "B",
+      "evidence_direction": "SUPPORTS",
+      "evidence_significance": "SENSITIZES",
+      "therapy_names": "Imatinib",
+      "therapy_ncit_ids": "NCIT:C62035",
+      "therapy_rxnorm_ids": "282388",
+      "evidence_description": "In a multicenter phase II trial of imatinib in metastatic mucosal, acral, or chronically sun-damaged melanoma with KIT alterations, patients with KIT mutations showed a significantly higher response rate compared to those with KIT amplification only. Best overall response rate (BORR) was 54% (7 of 13) in KIT-mutated tumors versus 0% in KIT-amplified only tumors. The overall disease control rate was 77% in KIT-mutated versus 18% in KIT-amplified tumors. The difference was statistically significant."
+    },
+    {
+      "feature_names": "KIT",
+      "gene_entrez_ids": "3815",
+      "variant_names": "KIT Amplification",
+      "disease_name": "Melanoma",
+      "disease_efo_id": "EFO_0002617",
+      "evidence_type": "PREDICTIVE",
+      "evidence_level": "B",
+      "evidence_direction": "DOES_NOT_SUPPORT",
+      "evidence_significance": "SENSITIZES",
+      "therapy_names": "Imatinib",
+      "therapy_ncit_ids": "NCIT:C62035",
+      "therapy_rxnorm_ids": "282388",
+      "evidence_description": "In a multicenter phase II trial of imatinib in metastatic mucosal, acral, or chronically sun-damaged melanoma, patients with KIT amplification only (without KIT mutation) showed 0% response rate to imatinib, compared to 54% in KIT-mutated tumors. The disease control rate was only 18% in KIT-amplified only tumors versus 77% in KIT-mutated tumors. The study concludes that imatinib can be effective when tumors harbor KIT mutations, but not if KIT is amplified only."
+    },
+    {
+      "feature_names": "NRAS",
+      "gene_entrez_ids": "4893",
+      "variant_names": "NRAS Mutation",
+      "disease_name": "Melanoma",
+      "disease_efo_id": "EFO_0002617",
+      "evidence_type": "PREDICTIVE",
+      "evidence_level": "B",
+      "evidence_direction": "SUPPORTS",
+      "evidence_significance": "RESISTANCE",
+      "therapy_names": "Imatinib",
+      "therapy_ncit_ids": "NCIT:C62035",
+      "therapy_rxnorm_ids": "282388",
+      "evidence_description": "In a phase II trial of imatinib in KIT-altered melanoma, four patients harbored pretreatment NRAS mutations (including NRAS G12C, G12A, Q61K, Q61H). The study concludes that NRAS mutations may be a mechanism of therapeutic resistance to imatinib in melanoma."
+    }
+  ]
+}
