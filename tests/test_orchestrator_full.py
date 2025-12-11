@@ -60,18 +60,31 @@ async def run_full_orchestration_test(reader_checkpoint_path: str):
         # Check for normalized fields in the first item
         item = context.state.final_extractions[0]
         print("\n--- Normalized Item [0] Fields ---")
-        tier2_fields = [
-            "gene_entrez_ids", "disease_efo_id", "therapy_ncit_ids", 
-            "therapy_rxnorm_ids", "source_pmcid", "drug_safety_profile"
-        ]
+        # Define field aliases to check
+        field_checks = {
+            "gene_entrez_ids": ["gene_entrez_ids", "gene_entrez_id"],
+            "disease_efo_id": ["disease_efo_id"],
+            "therapy_ncit_ids": ["therapy_ncit_ids", "therapy_ncit_id"],
+            "therapy_rxnorm_ids": ["therapy_rxnorm_ids", "therapy_rxcui"],
+            "source_pmcid": ["source_pmcid"],
+            "drug_safety_profile": ["drug_safety_profile", "therapy_safety_profile"]
+        }
+        
         found_fields = []
-        for field in tier2_fields:
-            val = item.get(field)
+        for label, aliases in field_checks.items():
+            val = None
+            found_alias = None
+            for alias in aliases:
+                val = item.get(alias)
+                if val:
+                    found_alias = alias
+                    break
+            
             if val:
-                print(f"  - {field}: {val}")
-                found_fields.append(field)
+                print(f"  - {label} ({found_alias}): {str(val)[:50]}...")
+                found_fields.append(label)
             else:
-                print(f"  - {field}: [MISSING]")
+                print(f"  - {label}: [MISSING]")
         
         # Save output
         output_path = OUTPUTS_DIR / f"{paper_id}_full_orchestration_test.json"

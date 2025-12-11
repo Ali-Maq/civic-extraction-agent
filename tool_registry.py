@@ -30,7 +30,6 @@ from tools.validation_tools import (
     validate_evidence_item,
 )
 from tools.normalization_tools import (
-    normalize_extractions,
     finalize_extraction,
     get_tier2_coverage,
     lookup_rxnorm,
@@ -65,7 +64,6 @@ def build_civic_mcp_server():
             get_draft_extractions,
             save_critique,
             increment_iteration,
-            normalize_extractions,
             finalize_extraction,
             get_tier2_coverage,
             lookup_rxnorm,
@@ -102,7 +100,6 @@ ORCHESTRATOR_AND_SUBAGENT_TOOLS = [
     "mcp__civic_tools__get_draft_extractions",
     "mcp__civic_tools__save_critique",
     "mcp__civic_tools__increment_iteration",
-    "mcp__civic_tools__normalize_extractions",
     "mcp__civic_tools__finalize_extraction",
     "mcp__civic_tools__get_tier2_coverage",
     # Normalizer tools

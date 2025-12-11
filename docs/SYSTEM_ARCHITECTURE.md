@@ -63,8 +63,8 @@ graph TD
 
 | Component | Responsibility | Key File |
 | :--- | :--- | :--- |
-| **`Reader`** | Image-to-Text conversion. Handles tables/figures. | `civic_extraction/agents/reader.py` |
-| **`Orchestrator`** | Managing the lifecycle and state. | `civic_extraction/agents/orchestrator.py` |
+| **`Reader`** | Image-to-Text conversion. Handles tables/figures. | `civic_extraction/client.py` |
+| **`Orchestrator`** | Managing the lifecycle and state. | `civic_extraction/client.py` |
 | **`CIViCContext`** | Global state (extracted text, draft items). | `civic_extraction/context/state.py` |
 | **`Tools`** | Functions agents can call (save, lookup). | `civic_extraction/tools/` |
 
@@ -132,15 +132,15 @@ sequenceDiagram
 
 ## 4. Agent & Tool Map (For SDEs)
 
-This table maps exactly which Python file defines the agent and which tools it has access to.
+This table maps exactly which Python file defines the agent and which tools it has access to. All agents are defined in `client.py` for simpler orchestration.
 
 | Agent | Source File | System Prompt | Tools Access |
 | :--- | :--- | :--- | :--- |
-| **Reader** | `agents/reader.py` | "Your ONLY job is to read... extract ALL content..." | `save_paper_content` (Intent-based restriction) |
-| **Planner** | `agents/planner.py` | "Identify key variants... estimate items..." | `get_paper_content`, `save_extraction_plan` |
-| **Extractor** | `agents/extractor.py` | "Extract evidence items... 8 required fields..." | `get_paper_content`, `get_extraction_plan`, `save_evidence_items` |
-| **Critic** | `agents/critic.py` | "Validate verbatim quotes... check logic..." | `get_paper_content`, `get_draft_extractions`, `save_critique`, `increment_iteration` |
-| **Normalizer** | `agents/normalizer.py` | "Standardize entities... Intelligent Error Handling..." | `get_draft_extractions`, `save_evidence_items`, `finalize_extraction`<br>**Lookups:** `lookup_rxnorm`, `lookup_efo`, `lookup_gene_entrez`, `lookup_safety_profile`, etc. |
+| **Reader** | `client.py` | "Your ONLY job is to read... extract ALL content..." | `save_paper_content` (Intent-based restriction) |
+| **Planner** | `client.py` | "Identify key variants... estimate items..." | `get_paper_content`, `save_extraction_plan` |
+| **Extractor** | `client.py` | "Extract evidence items... 8 required fields..." | `get_paper_content`, `get_extraction_plan`, `save_evidence_items` |
+| **Critic** | `client.py` | "Validate verbatim quotes... check logic..." | `get_paper_content`, `get_draft_extractions`, `save_critique`, `increment_iteration` |
+| **Normalizer** | `client.py` | "Standardize entities... Intelligent Error Handling..." | `get_draft_extractions`, `save_evidence_items`, `finalize_extraction`<br>**Lookups:** `lookup_rxnorm`, `lookup_efo`, `lookup_gene_entrez`, `lookup_safety_profile`, etc. |
 
 ### Note on Normalization
 We support **Agentic Normalization**. The `Normalizer` agent is NOT just a script; it actively thinks. It calls granular tools like `lookup_rxnorm` and `lookup_efo` individually. This allows it to handle failures (e.g., if "Mellanoma" fails, it retries with "Melanoma").
@@ -152,18 +152,19 @@ We support **Agentic Normalization**. The `Normalizer` agent is NOT just a scrip
 ### "I want to change how we parse the PDF."
 *   **File:** `civic_extraction/client.py` -> `_load_images_from_pdf` method (uses PyMuPDF).
 *   **Method:** Chunked Image Injection (we feed 2-3 page images per prompt to the Reader).
+*   **Mitigation:** We use a "Succinct Acknowledgment" prompt strategy ("Received Part X") to prevent the Reader from generating long summaries during ingestion, which avoids API content filters.
 
 ### "The extraction is missing the 'Drug' field."
-*   **File:** `civic_extraction/agents/extractor.py` -> `EXTRACTOR_SYSTEM_PROMPT`.
+*   **File:** `civic_extraction/client.py` -> `EXTRACTOR_AGENT` definition.
 *   **File:** `civic_extraction/schemas/evidence_item.py` -> Pydantic model.
 
 ### "Normalization is failing for a specific drug."
 *   **File:** `civic_extraction/tools/normalization_tools.py` -> Check `_lookup_rxnorm_internal`.
-*   **File:** `civic_extraction/agents/normalizer.py` -> Check prompt for retry logic.
+*   **File:** `civic_extraction/client.py` -> Check `NORMALIZER_AGENT` prompt for retry logic.
 
 ### "I want to add a new step to the pipeline."
 *   **File:** `civic_extraction/client.py` -> Add agent definition.
-*   **File:** `civic_extraction/agents/orchestrator.py` -> Update `ORCHESTRATOR_SYSTEM_PROMPT` instructions.
+*   **File:** `civic_extraction/client.py` -> Update `ORCHESTRATOR_SYSTEM_PROMPT` instructions.
 
 ---
 

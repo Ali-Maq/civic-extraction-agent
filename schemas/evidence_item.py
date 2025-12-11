@@ -295,7 +295,63 @@ class EvidenceItem(BaseModel):
         None,
         description="Overall extraction metadata and justification"
     )
+
+    # =========================================================================
+    # TIER 2 FIELDS (NORMALIZATION - Optional, populated by Normalizer)
+    # =========================================================================
     
+    # Identifiers (Support both singular/plural/alias conventions)
+    gene_entrez_ids: Optional[Any] = Field(None, description="NCBI Entrez Gene ID (Legacy)")
+    gene_entrez_id: Optional[Any] = Field(None, description="NCBI Entrez Gene ID")
+    
+    disease_doid: Optional[str] = Field(None, description="Disease Ontology ID")
+    disease_efo_id: Optional[str] = Field(None, description="EFO ID")
+    
+    therapy_ncit_ids: Optional[str] = Field(None, description="NCI Thesaurus ID (Legacy)")
+    therapy_ncit_id: Optional[str] = Field(None, description="NCI Thesaurus ID")
+    
+    therapy_rxnorm_ids: Optional[str] = Field(None, description="RxNorm CUI (Legacy)")
+    therapy_rxcui: Optional[str] = Field(None, description="RxNorm CUI")
+    
+    factor_ncit_ids: Optional[str] = Field(None, description="NCIt ID for factors")
+    factor_ncit_id: Optional[str] = Field(None, description="NCIt ID for factors")
+    
+    variant_type_soids: Optional[str] = Field(None, description="Sequence Ontology ID")
+    variant_type_soid: Optional[str] = Field(None, description="Sequence Ontology ID")
+    
+    # Variant External IDs
+    variant_clinvar_ids: Optional[Any] = Field(None, description="ClinVar ID")
+    variant_clinvar_id: Optional[Any] = Field(None, description="ClinVar ID")
+    
+    variant_allele_registry_ids: Optional[Any] = Field(None, description="ClinGen Allele Registry ID")
+    variant_allele_registry_id: Optional[Any] = Field(None, description="ClinGen Allele Registry ID")
+    
+    variant_mane_select_transcripts: Optional[Any] = Field(None, description="MANE Transcript")
+    
+    # Phenotypes
+    phenotype_ids: Optional[Any] = Field(None, description="Phenotype ID")
+    phenotype_hpo_ids: Optional[Any] = Field(None, description="HPO ID")
+    hpo_id: Optional[Any] = Field(None, description="HPO ID")
+    
+    # Source
+    source_citation_id: Optional[str] = Field(None, description="PMID")
+    source_pmid: Optional[str] = Field(None, description="PMID")
+    source_pmcid: Optional[str] = Field(None, description="PMCID")
+    
+    # Genomic Coordinates
+    chromosome: Optional[str] = Field(None, description="Chromosome (e.g. '7', 'X')")
+    start_position: Optional[Any] = Field(None, description="Start position")
+    stop_position: Optional[Any] = Field(None, description="Stop position")
+    reference_build: Optional[str] = Field(None, description="Genome build (GRCh37/38)")
+    representative_transcript: Optional[str] = Field(None, description="Transcript ID")
+    reference_bases: Optional[str] = Field(None, description="Ref bases")
+    variant_bases: Optional[str] = Field(None, description="Alt bases")
+    coordinate_type: Optional[str] = Field(None, description="Coordinate type")
+    
+    # Safety
+    drug_safety_profile: Optional[Any] = Field(None, description="FAERS Safety Data")
+    therapy_safety_profile: Optional[Any] = Field(None, description="FAERS Safety Data")
+
     # =========================================================================
     # VALIDATORS
     # =========================================================================

@@ -1,0 +1,41 @@
+{
+  "paper_id": "00065_Wernig_2008",
+  "evidence_items": [
+    {
+      "feature_names": "JAK2",
+      "variant_names": "V617F",
+      "disease_name": "Polycythemia vera",
+      "evidence_type": "PREDICTIVE",
+      "evidence_level": "D",
+      "evidence_direction": "SUPPORTS",
+      "evidence_significance": "SENSITIZES",
+      "therapy_names": "TG101348",
+      "evidence_description": "In a murine model of JAK2V617F-induced polycythemia vera, TG101348, a selective JAK2 inhibitor with an in vitro IC50 of ~3 nM, showed therapeutic efficacy with statistically significant reduction in hematocrit and leukocyte count, dose-dependent reduction/elimination of extramedullary hematopoiesis, and evidence for attenuation of myelofibrosis. In vivo responses correlated with reduction/elimination of JAK2V617F disease burden assessed by quantitative genomic PCR and suppression of endogenous erythroid colony formation.",
+      "source_page_numbers": "Abstract",
+      "verbatim_quote": "We report that TG101348, a selective small-molecule inhibitor of JAK2 with an in vitro IC50 of ~3 nM, shows therapeutic efficacy in a murine model of myeloproliferative disease induced by the JAK2V617F mutation. In treated animals, there was a statistically significant reduction in hematocrit and leukocyte count, a dose-dependent reduction/elimination of extramedullary hematopoiesis, and, at least in some instances, evidence for attenuation of myelofibrosis.",
+      "extraction_confidence": 0.95,
+      "extraction_reasoning": "This evidence is actionable because it demonstrates that JAK2 V617F mutation predicts sensitivity to JAK2 inhibitor TG101348. Although preclinical (murine model), the study shows clear therapeutic efficacy with multiple endpoints including hematologic response and molecular response (reduction of JAK2V617F disease burden). This informs treatment decisions for JAK2V617F-positive PV patients.",
+      "gene_entrez_id": "3717",
+      "disease_efo_id": "EFO_0002429",
+      "therapy_ncit_id": "NCIT:C88293"
+    },
+    {
+      "feature_names": "JAK2",
+      "variant_names": "V617F",
+      "disease_name": "Myeloproliferative disease",
+      "evidence_type": "PREDICTIVE",
+      "evidence_level": "D",
+      "evidence_direction": "SUPPORTS",
+      "evidence_significance": "SENSITIZES",
+      "therapy_names": "TG101348",
+      "evidence_description": "TG101348 treatment in JAK2V617F-induced myeloproliferative disease murine model resulted in in vivo inhibition of JAK-STAT signal transduction as assessed by flow cytometric measurement of phosphorylated Stat5, demonstrating on-target activity. The treatment showed no apparent toxicities and no effect on T cell number, supporting a favorable therapeutic index for JAK2V617F-positive MPD.",
+      "source_page_numbers": "Abstract",
+      "verbatim_quote": "In vivo responses were correlated with surrogate endpoints, including reduction/elimination of JAK2V617F disease burden assessed by quantitative genomic PCR, suppression of endogenous erythroid colony formation, and in vivo inhibition of JAK-STAT signal transduction as assessed by flow cytometric measurement of phosphorylated Stat5.",
+      "extraction_confidence": 0.9,
+      "extraction_reasoning": "This evidence is actionable because it demonstrates molecular mechanism of response (pSTAT5 inhibition) in JAK2V617F-positive MPD treated with TG101348, supporting the predictive value of JAK2 V617F for JAK2 inhibitor sensitivity. The safety profile (no T cell effect) adds clinical relevance.",
+      "gene_entrez_id": "3717",
+      "disease_efo_id": "EFO_0002428",
+      "therapy_ncit_id": "NCIT:C88293"
+    }
+  ]
+}
