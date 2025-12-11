@@ -136,19 +136,22 @@ This table maps exactly which Python file defines the agent and which tools it h
 
 | Agent | Source File | System Prompt | Tools Access |
 | :--- | :--- | :--- | :--- |
-| **Reader** | `agents/reader.py` | "Your ONLY job is to read... extract ALL content..." | `save_paper_content` |
+| **Reader** | `agents/reader.py` | "Your ONLY job is to read... extract ALL content..." | `save_paper_content` (Intent-based restriction) |
 | **Planner** | `agents/planner.py` | "Identify key variants... estimate items..." | `get_paper_content`, `save_extraction_plan` |
 | **Extractor** | `agents/extractor.py` | "Extract evidence items... 8 required fields..." | `get_paper_content`, `get_extraction_plan`, `save_evidence_items` |
 | **Critic** | `agents/critic.py` | "Validate verbatim quotes... check logic..." | `get_paper_content`, `get_draft_extractions`, `save_critique`, `increment_iteration` |
 | **Normalizer** | `agents/normalizer.py` | "Standardize entities... Intelligent Error Handling..." | `get_draft_extractions`, `save_evidence_items`, `finalize_extraction`<br>**Lookups:** `lookup_rxnorm`, `lookup_efo`, `lookup_gene_entrez`, `lookup_safety_profile`, etc. |
+
+### Note on Normalization
+We support **Agentic Normalization**. The `Normalizer` agent is NOT just a script; it actively thinks. It calls granular tools like `lookup_rxnorm` and `lookup_efo` individually. This allows it to handle failures (e.g., if "Mellanoma" fails, it retries with "Melanoma").
 
 ---
 
 ## 5. File Guide: Where to Look
 
 ### "I want to change how we parse the PDF."
-*   **File:** `civic_extraction/client.py` -> `_load_images_from_pdf` method.
-*   **File:** `civic_extraction/agents/reader.py` -> Prompt definition.
+*   **File:** `civic_extraction/client.py` -> `_load_images_from_pdf` method (uses PyMuPDF).
+*   **Method:** Chunked Image Injection (we feed 2-3 page images per prompt to the Reader).
 
 ### "The extraction is missing the 'Drug' field."
 *   **File:** `civic_extraction/agents/extractor.py` -> `EXTRACTOR_SYSTEM_PROMPT`.
@@ -168,7 +171,7 @@ This table maps exactly which Python file defines the agent and which tools it h
 
 ### State Management
 We use a centralized **Context Object** (`civic_extraction/context/state.py`).
-*   It is NOT just a dict; it uses `dataclasses` for type safety.
+*   It uses `dataclasses` for type safety (e.g., `ExtractionPlan`).
 *   `ctx.state.paper_content`: The large text blob from Reader.
 *   `ctx.state.extraction_plan`: The strategy.
 *   `ctx.state.draft_extractions`: List of dictionaries.
@@ -180,11 +183,12 @@ The system is crash-resistant. `run_extraction.py` checks for JSON files on disk
 *   **Level 3:** `03_extractor_output.json` (Drafts).
 *   **Level 4:** `04_normalization_output.json`.
 
+**Note:** The resume logic is handled in `scripts/run_extraction.py`, which pre-loads the state into `CIViCContext`.
+
 ### Async & Normalization
 *   Normalization tools (`tools/normalization_tools.py`) use `aiohttp` for concurrent API calls.
-*   The `Normalizer` agent is **Agentic**: It doesn't just run a batch script. It "thinks" ("RxNorm failed, let me try searching for the synonym").
+*   The `Normalizer` agent calls these granular tools (`lookup_...`) dynamically.
 
 ### Pydantic & Validation
 *   We use strict Pydantic models in `schemas/` to validate tools inputs/outputs.
 *   Be careful when moving data between Pydantic models and raw Dicts (we handled this in `extraction_tools.py` by converting inputs).
-
