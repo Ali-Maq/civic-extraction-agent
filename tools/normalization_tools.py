@@ -37,6 +37,9 @@ Tier 2 Fields (20 fields requiring database lookups):
 from typing import Dict, Any, List, Optional
 import re
 import json
+import urllib.parse
+import aiohttp
+from datetime import datetime
 
 # Import from existing normalization module
 import sys
@@ -45,6 +48,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from claude_agent_sdk import tool
 from context import require_context
+from config import OUTPUTS_DIR
 
 # Lazy imports to avoid circular dependencies
 _variant_annotator = None
@@ -54,7 +58,10 @@ def get_variant_annotator_async():
     """Lazy load the async variant annotator."""
     global _variant_annotator
     if _variant_annotator is None:
-        from normalization.variant_annotator import annotate_variant_async
+        try:
+            from normalization.variant_annotator import annotate_variant_async
+        except ImportError:
+            from civic_extraction.normalization.variant_annotator import annotate_variant_async
         _variant_annotator = annotate_variant_async
     return _variant_annotator
 
@@ -62,9 +69,43 @@ def get_variant_annotator():
     """Lazy load the variant annotator."""
     global _variant_annotator
     if _variant_annotator is None:
-        from normalization.variant_annotator import annotate_variant
+        try:
+            from normalization.variant_annotator import annotate_variant
+        except ImportError:
+            from civic_extraction.normalization.variant_annotator import annotate_variant
         _variant_annotator = annotate_variant
     return _variant_annotator
+
+
+def _dump_checkpoint(filename: str, extra_data: dict = None):
+    """Helper to save checkpoint to disk."""
+    try:
+        ctx = require_context()
+        if not ctx.paper: return # Can't save if paper_id unknown
+        
+        paper_id = ctx.paper.paper_id
+        checkpoint_dir = OUTPUTS_DIR / "checkpoints" / paper_id
+        checkpoint_dir.mkdir(parents=True, exist_ok=True)
+        
+        checkpoint_path = checkpoint_dir / filename
+        
+        # Base data from context state
+        data = {
+            "paper_id": paper_id,
+            "timestamp": datetime.now().isoformat(),
+            # Include minimal context to allow resume
+            "paper_content": ctx.paper_content,
+        }
+        
+        # Merge extra data
+        if extra_data:
+            data.update(extra_data)
+            
+        with open(checkpoint_path, "w") as f:
+            json.dump(data, f, indent=2, default=str)
+            
+    except Exception as e:
+        print(f"Warning: Failed to save checkpoint {filename}: {e}")
 
 
 # ============================================================================
@@ -172,13 +213,19 @@ def is_specific_variant(variant_name: str) -> bool:
     Generic terms: MUTATION, WILD TYPE, AMPLIFICATION (without position)
     
     Args:
-        variant_name: Variant name to check
+        variant_name: Variant name to check (str or list)
         
     Returns:
         True if variant is specific, False if generic
     """
     if not variant_name:
         return False
+        
+    # Handle list input gracefully
+    if isinstance(variant_name, list):
+        if not variant_name:
+            return False
+        variant_name = str(variant_name[0])
     
     normalized = variant_name.lower().strip()
     
@@ -232,6 +279,13 @@ def lookup_gene_entrez_id(gene_symbol: str) -> Dict[str, Any]:
         Dict with gene_entrez_id if found
     """
     try:
+        # Handle list input
+        if isinstance(gene_symbol, list):
+            gene_symbol = str(gene_symbol[0]) if gene_symbol else ""
+
+        if not gene_symbol:
+             return {"found": False, "error": "Empty gene symbol"}
+
         import requests
 
         # Query MyGene.info for gene info
@@ -277,8 +331,8 @@ async def lookup_variant_info_async(gene_symbol: str, variant_name: str) -> Dict
         }
     
     try:
-        from normalization.variant_annotator import annotate_variant_async
-        result = await annotate_variant_async(gene_symbol, variant_name)
+        annotate = get_variant_annotator_async()
+        result = await annotate(gene_symbol, variant_name)
 
         if result.get("found"):
             return {
@@ -378,6 +432,13 @@ def lookup_disease_doid(disease_name: str) -> Dict[str, Any]:
         Dict with disease_doid if found
     """
     try:
+        # Handle list input
+        if isinstance(disease_name, list):
+            disease_name = str(disease_name[0]) if disease_name else ""
+
+        if not disease_name:
+             return {"found": False, "error": "Empty disease name"}
+
         import requests
 
         # Query OLS for disease
@@ -418,6 +479,87 @@ def lookup_disease_doid(disease_name: str) -> Dict[str, Any]:
         return {"found": False, "error": str(e)}
 
 
+async def lookup_therapy_ncit_id_async(therapy_name: str) -> Dict[str, Any]:
+    """
+    Look up NCI Thesaurus ID for a SINGLE therapy/drug name (Async).
+    """
+    if not therapy_name:
+        return {"found": False, "error": "Empty therapy name"}
+
+    # Handle list input
+    if isinstance(therapy_name, list):
+        therapy_name = str(therapy_name[0]) if therapy_name else ""
+    
+    if not therapy_name or not therapy_name.strip():
+        return {"found": False, "error": "Empty therapy name"}
+    
+    # Clean the therapy name
+    therapy_name = therapy_name.strip()
+    
+    try:
+        # Query OLS for therapy in NCI Thesaurus
+        url = "https://www.ebi.ac.uk/ols/api/search"
+        # Increase rows and ensure fuzzy search
+        # Using wildcards *term* helps with partial matches in OLS
+        search_term = therapy_name
+        if len(therapy_name) > 4: # Only use wildcard for longer terms
+             search_term = f"*{therapy_name}*"
+             
+        params = f"q={urllib.parse.quote(search_term)}&ontology=ncit&rows=20&exact=false"
+        full_url = f"{url}?{params}"
+
+        async with aiohttp.ClientSession() as session:
+            async with session.get(full_url) as response:
+                if response.status != 200:
+                    return {"found": False, "error": f"HTTP {response.status}"}
+                
+                data = await response.json()
+                docs = data.get("response", {}).get("docs", [])
+
+                # 1. Exact case-insensitive match on Label
+                for doc in docs:
+                    label = doc.get("label", "").lower()
+                    if label == therapy_name.lower():
+                        return _format_ncit_result(doc)
+
+                # 2. Match on Synonyms
+                # OLS returns 'synonyms' list
+                for doc in docs:
+                    synonyms = [s.lower() for s in doc.get("synonyms", [])]
+                    if therapy_name.lower() in synonyms:
+                         return _format_ncit_result(doc)
+
+                # 3. Fuzzy/Partial Match (if no exact)
+                # If we used wildcards, the first result might be good enough if score is high?
+                # OLS sorts by relevance.
+                if docs:
+                    # Return first result but mark as fuzzy? 
+                    # For now just return it as OLS ranking is usually okay.
+                    return _format_ncit_result(docs[0])
+
+        return {"found": False, "error": f"Therapy '{therapy_name}' not found in NCIt"}
+
+    except Exception as e:
+        return {"found": False, "error": str(e)}
+
+def _format_ncit_result(doc):
+    """Helper to format OLS NCIt result"""
+    obo_id = doc.get("obo_id", "")
+    ncit_id = None
+    if obo_id.startswith("NCIT:"):
+        ncit_id = obo_id
+    elif "NCIT_" in obo_id:
+        ncit_id = "NCIT:" + obo_id.split("NCIT_")[-1]
+    
+    if ncit_id:
+        return {
+            "found": True,
+            "therapy_ncit_id": ncit_id,
+            "therapy_label": doc.get("label"),
+            "source": "OLS/NCIt"
+        }
+    return {"found": False, "error": "Invalid ID format"}
+
 def lookup_therapy_ncit_id(therapy_name: str) -> Dict[str, Any]:
     """
     Look up NCI Thesaurus ID for a SINGLE therapy/drug name.
@@ -433,6 +575,13 @@ def lookup_therapy_ncit_id(therapy_name: str) -> Dict[str, Any]:
     Returns:
         Dict with therapy_ncit_id if found
     """
+    if not therapy_name:
+        return {"found": False, "error": "Empty therapy name"}
+
+    # Handle list input
+    if isinstance(therapy_name, list):
+        therapy_name = str(therapy_name[0]) if therapy_name else ""
+    
     if not therapy_name or not therapy_name.strip():
         return {"found": False, "error": "Empty therapy name"}
     
@@ -508,7 +657,7 @@ def lookup_therapies(therapy_string: str) -> Dict[str, Any]:
     Handles comma-separated therapy strings by splitting and looking up each.
     
     Args:
-        therapy_string: One or more drug names, comma-separated
+        therapy_string: One or more drug names, comma-separated (or list of strings)
                        e.g., "Pembrolizumab" or "Dabrafenib,Trametinib"
     
     Returns:
@@ -517,6 +666,11 @@ def lookup_therapies(therapy_string: str) -> Dict[str, Any]:
     if not therapy_string:
         return {"found": False, "error": "No therapy provided"}
     
+    # Handle list input
+    if isinstance(therapy_string, list):
+        # Join list elements with comma
+        therapy_string = ",".join([str(t) for t in therapy_string if t])
+
     # Split by comma and clean each drug name
     drugs = [d.strip() for d in therapy_string.split(",") if d.strip()]
     
@@ -626,7 +780,7 @@ def lookup_pmid_by_title(paper_title: str) -> Dict[str, Any]:
 def lookup_variant_type_so_id(variant_type_name: str) -> Dict[str, Any]:
     """
     Look up Sequence Ontology ID for a variant type.
-
+    
     Common mappings:
     - Missense Variant -> SO:0001583
     - Frameshift Truncation -> SO:0001589
@@ -644,6 +798,13 @@ def lookup_variant_type_so_id(variant_type_name: str) -> Dict[str, Any]:
     if not variant_type_name:
         return {"found": False, "error": "No variant type provided"}
     
+    # Handle list input
+    if isinstance(variant_type_name, list):
+        variant_type_name = str(variant_type_name[0]) if variant_type_name else ""
+    
+    if not variant_type_name:
+         return {"found": False, "error": "Empty variant type"}
+
     # Common SO term mappings (case-insensitive)
     SO_MAPPINGS = {
         # Point mutations
@@ -749,6 +910,220 @@ def lookup_variant_type_so_id(variant_type_name: str) -> Dict[str, Any]:
     return {"found": False, "error": f"Variant type '{variant_type_name}' not found in SO mappings"}
 
 
+# =============================================================================
+# NEW: TOOLUNIVERSE INSPIRED LOOKUPS (Direct API Implementation)
+# =============================================================================
+
+# Define INTERNAL helper functions first (not tools) for use in normalizer
+
+async def _lookup_rxnorm_internal(drug_name: str) -> Dict[str, Any]:
+    """Internal helper for RxNorm lookup."""
+    if not drug_name:
+        return {"found": False, "error": "Empty drug name"}
+
+    # Handle list input just in case
+    if isinstance(drug_name, list):
+         drug_name = str(drug_name[0]) if drug_name else ""
+         if not drug_name:
+             return {"found": False, "error": "Empty drug name"}
+        
+    base_url = "https://rxnav.nlm.nih.gov/REST"
+    url = f"{base_url}/approximateTerm.json?term={urllib.parse.quote(drug_name)}&maxEntries=1"
+    
+    async with aiohttp.ClientSession() as session:
+        try:
+            async with session.get(url) as response:
+                if response.status != 200:
+                    return {"found": False, "error": f"HTTP {response.status}"}
+                
+                data = await response.json()
+                if 'approximateGroup' in data and 'candidate' in data['approximateGroup']:
+                    candidates = data['approximateGroup']['candidate']
+                    if candidates:
+                        best = candidates[0]
+                        return {
+                            "found": True,
+                            "rxcui": best.get('rxcui'),
+                            "score": best.get('score'),
+                            "source": "RxNorm/NLM"
+                        }
+                return {"found": False, "error": "Not found in RxNorm"}
+        except Exception as e:
+            return {"found": False, "error": str(e)}
+
+async def _lookup_efo_internal(disease_name: str) -> Dict[str, Any]:
+    """Internal helper for EFO lookup."""
+    if not disease_name:
+        return {"found": False, "error": "Empty disease name"}
+
+    # Handle list input just in case
+    if isinstance(disease_name, list):
+         disease_name = str(disease_name[0]) if disease_name else ""
+         if not disease_name:
+             return {"found": False, "error": "Empty disease name"}
+    
+    # Fuzzy Search Enhancement
+    search_term = disease_name
+    if len(disease_name) > 4:
+         search_term = f"*{disease_name}*"
+
+    base_url = "https://www.ebi.ac.uk/ols/api/search"
+    url = f"{base_url}?q={urllib.parse.quote(search_term)}&ontology=efo&rows=5&exact=false"
+    
+    async with aiohttp.ClientSession() as session:
+        try:
+            async with session.get(url) as response:
+                if response.status != 200:
+                    return {"found": False, "error": f"HTTP {response.status}"}
+                
+                data = await response.json()
+                if 'response' in data and 'docs' in data['response']:
+                    docs = data['response']['docs']
+                    
+                    if docs:
+                        # Return best match (OLS ranks well usually)
+                        best = docs[0]
+                        return {
+                            "found": True,
+                            "efo_id": best.get('short_form'),
+                            "label": best.get('label'),
+                            "description": best.get('description', [])[0] if best.get('description') else None,
+                            "source": "EFO/OLS"
+                        }
+                return {"found": False, "error": "Not found in EFO"}
+        except Exception as e:
+            return {"found": False, "error": str(e)}
+
+async def _lookup_safety_profile_internal(drug_name: str) -> Dict[str, Any]:
+    """Internal helper for Safety lookup."""
+    if not drug_name:
+        return {"found": False, "error": "Empty drug name"}
+
+    # Handle list input just in case
+    if isinstance(drug_name, list):
+         drug_name = str(drug_name[0]) if drug_name else ""
+         if not drug_name:
+             return {"found": False, "error": "Empty drug name"}
+        
+    base_url = "https://api.fda.gov/drug/event.json"
+    url = f"{base_url}?search=patient.drug.medicinalproduct:\"{urllib.parse.quote(drug_name)}\"&count=patient.reaction.reactionmeddrapt.exact&limit=5"
+    
+    async with aiohttp.ClientSession() as session:
+        try:
+            async with session.get(url) as response:
+                if response.status != 200:
+                    return {"found": False, "error": f"HTTP {response.status}"}
+                
+                data = await response.json()
+                if 'results' in data:
+                    return {
+                        "found": True,
+                        "top_events": [
+                            {"term": item['term'], "count": item['count']}
+                            for item in data['results']
+                        ],
+                        "source": "FAERS/OpenFDA"
+                    }
+                return {"found": False, "error": "No safety data found"}
+        except Exception as e:
+            return {"found": False, "error": str(e)}
+
+async def _lookup_clinical_trial_internal(nct_id: str) -> Dict[str, Any]:
+    """Internal helper for ClinicalTrials.gov lookup."""
+    if not nct_id:
+        return {"found": False, "error": "Empty NCT ID"}
+        
+    # Clean ID
+    nct_id = nct_id.strip()
+    if not nct_id.startswith("NCT"):
+        return {"found": False, "error": "Invalid format (must start with NCT)"}
+
+    base_url = f"https://clinicaltrials.gov/api/v2/studies/{nct_id}"
+    
+    async with aiohttp.ClientSession() as session:
+        try:
+            async with session.get(base_url) as response:
+                if response.status != 200:
+                    return {"found": False, "error": f"HTTP {response.status}"}
+                
+                data = await response.json()
+                protocol = data.get("protocolSection", {})
+                id_module = protocol.get("identificationModule", {})
+                status_module = protocol.get("statusModule", {})
+                
+                return {
+                    "found": True,
+                    "nct_id": id_module.get("nctId"),
+                    "title": id_module.get("briefTitle"),
+                    "status": status_module.get("overallStatus"),
+                    "phases": protocol.get("designModule", {}).get("phases", []),
+                    "source": "ClinicalTrials.gov API v2"
+                }
+        except Exception as e:
+            return {"found": False, "error": str(e)}
+
+async def _lookup_hpo_internal(phenotype_name: str) -> Dict[str, Any]:
+    """Internal helper for HPO lookup."""
+    if not phenotype_name:
+        return {"found": False, "error": "Empty phenotype"}
+        
+    base_url = "https://www.ebi.ac.uk/ols/api/search"
+    query = urllib.parse.quote(phenotype_name)
+    url = f"{base_url}?q={query}&ontology=hp&rows=1&exact=false"
+    
+    async with aiohttp.ClientSession() as session:
+        try:
+            async with session.get(url) as response:
+                if response.status != 200:
+                    return {"found": False, "error": f"HTTP {response.status}"}
+                
+                data = await response.json()
+                docs = data.get("response", {}).get("docs", [])
+                
+                if docs:
+                    best = docs[0]
+                    return {
+                        "found": True,
+                        "hpo_id": best.get("obo_id"),
+                        "label": best.get("label"),
+                        "source": "EBI OLS (HPO)"
+                    }
+                return {"found": False, "error": "Not found in HPO"}
+        except Exception as e:
+            return {"found": False, "error": str(e)}
+
+
+async def _lookup_pmcid_internal(pmid: str) -> Dict[str, Any]:
+    """Internal helper to convert PMID to PMCID."""
+    if not pmid:
+        return {"found": False, "error": "Empty PMID"}
+    
+    # Clean PMID
+    pmid_clean = pmid.replace("PMID:", "").strip()
+        
+    # NEW URL (2025 update - verified via curl)
+    base_url = "https://pmc.ncbi.nlm.nih.gov/tools/idconv/api/v1/articles/"
+    url = f"{base_url}?tool=civic_agent&email=civic_agent@example.com&ids={pmid_clean}&format=json"
+    
+    async with aiohttp.ClientSession() as session:
+        try:
+            async with session.get(url) as response:
+                if response.status != 200:
+                    return {"found": False, "error": f"HTTP {response.status}"}
+                
+                data = await response.json()
+                records = data.get("records", [])
+                if records:
+                    record = records[0]
+                    pmcid = record.get("pmcid")
+                    if pmcid:
+                        return {"found": True, "pmcid": pmcid, "source": "NCBI ID Converter"}
+                
+                return {"found": False, "error": "No PMCID found"}
+        except Exception as e:
+            return {"found": False, "error": str(e)}
+
+
 async def normalize_evidence_item_async(evidence: Dict[str, Any]) -> Dict[str, Any]:
     """
     Normalize a single evidence item asynchronously.
@@ -764,30 +1139,108 @@ async def normalize_evidence_item_async(evidence: Dict[str, Any]) -> Dict[str, A
     task_map = {}
 
     gene = evidence.get("feature_names")
+    feature_type = evidence.get("feature_types", "GENE")
     variant = evidence.get("variant_names")
     disease = evidence.get("disease_name")
     therapy = evidence.get("therapy_names")
     title = evidence.get("source_title")
     variant_type = evidence.get("variant_type_names")
-
-    # 1. Gene Entrez (can be done via MyGene, but we'll use sync for now as it's fast or mock)
-    # Actually, let's keep simple lookups sync if they are fast, but MyVariant is the big one.
-    # Ideally all HTTP calls should be async.
-    # For this refactor, I will focus on making the variant lookup async as it is the most complex.
+    nct_ids = evidence.get("clinical_trial_nct_ids")
+    phenotypes = evidence.get("phenotype_names")
     
-    if gene and variant:
-        # We can run variant lookup
-        task = asyncio.create_task(lookup_variant_info_async(gene, variant))
+    # Check for existing PMID to convert
+    pmid_existing = evidence.get("source_citation_id")
+
+    # Helper to ensure string format
+    def to_str(val):
+        if isinstance(val, list):
+            return val[0] if val else ""
+        return str(val) if val else ""
+
+    # Ensure inputs are strings for lookups
+    gene_str = to_str(gene)
+    variant_str = to_str(variant)
+    disease_str = to_str(disease)
+    therapy_str = to_str(therapy)
+    # If therapy was a list, join it to handle multiple drugs
+    if isinstance(therapy, list):
+        therapy_str = ",".join([str(t) for t in therapy if t])
+    
+    nct_str = to_str(nct_ids)
+    phenotype_str = to_str(phenotypes)
+    pmid_str = to_str(pmid_existing)
+
+    # 1. Variant Lookup (MyVariant.info) - ONLY if it's a GENE
+    if gene_str and variant_str and feature_type.upper() == "GENE":
+        task = asyncio.create_task(lookup_variant_info_async(gene_str, variant_str))
         tasks.append(task)
         task_map[task] = "variant"
 
+    # 1.5 Factor Lookup (NCIt) - IF it's a FACTOR
+    if gene_str and feature_type.upper() == "FACTOR":
+         task = asyncio.create_task(lookup_therapy_ncit_id_async(gene_str))
+         tasks.append(task)
+         task_map[task] = "factor_ncit"
+
+    # 2. Drug/Therapy Normalization (RxNorm)
+    if therapy_str:
+        # Split therapies if multiple
+        drugs = [d.strip() for d in therapy_str.split(",") if d.strip()]
+        for drug in drugs:
+            task = asyncio.create_task(_lookup_rxnorm_internal(drug))
+            tasks.append(task)
+            task_map[task] = f"rxnorm_{drug}"
+            
+            task_safety = asyncio.create_task(_lookup_safety_profile_internal(drug))
+            tasks.append(task_safety)
+            task_map[task_safety] = f"safety_{drug}"
+
+    # 3. Disease Normalization (EFO)
+    if disease_str:
+        task = asyncio.create_task(_lookup_efo_internal(disease_str))
+        tasks.append(task)
+        task_map[task] = "efo"
+
+    # 4. Clinical Trials
+    if nct_str:
+        ids = [i.strip() for i in nct_str.split(",") if i.strip()]
+        for nid in ids:
+             if nid.startswith("NCT"):
+                task = asyncio.create_task(_lookup_clinical_trial_internal(nid))
+                tasks.append(task)
+                task_map[task] = f"nct_{nid}"
+
+    # 5. Phenotypes
+    if phenotype_str:
+        phens = [p.strip() for p in phenotype_str.split(",") if p.strip()]
+        for phen in phens:
+            task = asyncio.create_task(_lookup_hpo_internal(phen))
+            tasks.append(task)
+            task_map[task] = f"hpo_{phen}"
+            
+    # 6. PMCID Conversion (if PMID exists)
+    if pmid_str:
+        # Clean potential prefix
+        pmid_clean_check = pmid_str.replace("PMID:", "").strip()
+        if pmid_clean_check.isdigit():
+            task = asyncio.create_task(_lookup_pmcid_internal(pmid_clean_check))
+            tasks.append(task)
+            task_map[task] = "pmcid"
+
     # Await tasks
+    rxnorm_ids = []
+    safety_profiles = []
+    trial_data = []
+    hpo_ids = []
+    
     if tasks:
         done, _ = await asyncio.wait(tasks)
         for task in done:
-            kind = task_map.get(task)
+            kind = task_map.get(task, "unknown")
             try:
                 result = task.result()
+                
+                # --- Variant Logic ---
                 if kind == "variant":
                     if result.get("skipped"):
                         lookup_errors.append(f"Variant lookup skipped: {result.get('error')}")
@@ -820,25 +1273,103 @@ async def normalize_evidence_item_async(evidence: Dict[str, Any]) -> Dict[str, A
                             normalized["variant_clinvar_ids"] = result["variant_clinvar_ids"]
                             tier2_fields_added.append("variant_clinvar_ids")
 
-                        # HGVS (update if we have better info)
+                        # HGVS
                         if result.get("variant_hgvs_protein") and not evidence.get("variant_hgvs_descriptions"):
                             normalized["variant_hgvs_descriptions"] = result["variant_hgvs_protein"]
                             tier2_fields_added.append("variant_hgvs_descriptions")
 
-                        # Gene Entrez ID from variant lookup (often more reliable)
+                        # Gene Entrez ID
                         if result.get("gene_entrez_id") and not normalized.get("gene_entrez_ids"):
                             normalized["gene_entrez_ids"] = str(result["gene_entrez_id"])
                             if "gene_entrez_ids" not in tier2_fields_added:
                                 tier2_fields_added.append("gene_entrez_ids")
                     else:
                         lookup_errors.append(f"Variant lookup failed: Variant {gene}:{variant} not found")
+                
+                # --- RxNorm Logic ---
+                elif kind.startswith("rxnorm_"):
+                    drug_name = kind.split("_", 1)[1]
+                    if result.get("found"):
+                        rxnorm_ids.append(f"{drug_name}:{result['rxcui']}")
+                    else:
+                        lookup_errors.append(f"RxNorm not found for {drug_name}")
+                        
+                # --- Safety Logic ---
+                elif kind.startswith("safety_"):
+                    drug_name = kind.split("_", 1)[1]
+                    if result.get("found"):
+                        top_events = [e['term'] for e in result.get('top_events', [])[:3]]
+                        safety_profiles.append(f"{drug_name}: {', '.join(top_events)}")
+                
+                # --- EFO Logic ---
+                elif kind == "efo":
+                    if result.get("found"):
+                        normalized["disease_efo_id"] = result.get("efo_id")
+                        tier2_fields_added.append("disease_efo_id")
+                    else:
+                        lookup_errors.append(f"EFO lookup failed for {disease}")
+                
+                # --- Factor NCIt Logic ---
+                elif kind == "factor_ncit":
+                    if result.get("found"):
+                        normalized["factor_ncit_ids"] = result.get("therapy_ncit_id")
+                        tier2_fields_added.append("factor_ncit_ids")
+                    else:
+                        lookup_errors.append(f"Factor NCIt lookup failed: {result.get('error')}")
+
+                # --- Clinical Trial Logic ---
+                elif kind.startswith("nct_"):
+                    if result.get("found"):
+                        title_short = result['title'][:50] + "..." if len(result['title']) > 50 else result['title']
+                        trial_data.append(f"{result['nct_id']} ({result['status']}): {title_short}")
+                    else:
+                        lookup_errors.append(f"NCT lookup failed: {result.get('error')}")
+
+                # --- HPO Logic ---
+                elif kind.startswith("hpo_"):
+                    if result.get("found"):
+                        hpo_ids.append(result['hpo_id'])
+                        tier2_fields_added.append("phenotype_hpo_ids")
+                    else:
+                        lookup_errors.append(f"HPO lookup failed: {result.get('error')}")
+
+                # --- PMCID Logic ---
+                elif kind == "pmcid":
+                    if result.get("found"):
+                        normalized["source_pmcid"] = result["pmcid"]
+                        tier2_fields_added.append("source_pmcid")
+                    else:
+                        lookup_errors.append(f"PMCID lookup failed: {result.get('error')}")
+
             except Exception as e:
                 lookup_errors.append(f"{kind} lookup exception: {str(e)}")
 
-    # Run remaining sync lookups (Gene, Disease, Therapy, PMID, SOID)
-    # These are fast enough or can be made async later
+    # Add accumulated extra fields
+    if rxnorm_ids:
+        normalized["therapy_rxnorm_ids"] = "; ".join(rxnorm_ids)
+        tier2_fields_added.append("therapy_rxnorm_ids")
     
-    # ... (Keep existing sync logic for other fields for now to minimize code churn risk)
+    if safety_profiles:
+        normalized["drug_safety_profile"] = "; ".join(safety_profiles)
+        tier2_fields_added.append("drug_safety_profile")
+
+    if trial_data:
+        # Augment the existing clinical_trial_names or add a new field
+        # For now, append to clinical_trial_names if they are missing
+        current = normalized.get("clinical_trial_names", "")
+        new_names = "; ".join(trial_data)
+        if current:
+            normalized["clinical_trial_names"] = f"{current}; {new_names}"
+        else:
+            normalized["clinical_trial_names"] = new_names
+        # We don't add to tier2_fields_added because clinical_trial_names is Tier 1, 
+        # but we effectively enriched it.
+
+    if hpo_ids:
+        normalized["phenotype_hpo_ids"] = "; ".join(hpo_ids)
+        tier2_fields_added.append("phenotype_hpo_ids")
+
+    # Run remaining sync lookups (Gene, Disease DOID, Therapy NCIt, PMID, SOID)
     # Gene Entrez
     if gene and not normalized.get("gene_entrez_ids"):
         gene_result = lookup_gene_entrez_id(gene)
@@ -1133,7 +1664,8 @@ async def normalize_extractions(args: Dict[str, Any]) -> Dict[str, Any]:
     
     for i, item in enumerate(ctx.state.draft_extractions):
         try:
-            normalized = normalize_evidence_item(item)
+            # Use the ASYNC normalizer which has the new lookups
+            normalized = await normalize_evidence_item_async(item)
             normalized_items.append(normalized)
             
             # Track fields added and errors
@@ -1145,7 +1677,10 @@ async def normalize_extractions(args: Dict[str, Any]) -> Dict[str, Any]:
                     all_errors.append(f"Item {i}: {err}")
                     
         except Exception as e:
-            all_errors.append(f"Item {i}: Exception - {str(e)}")
+            import traceback
+            error_msg = f"Item {i}: Exception - {str(e)}\n{traceback.format_exc()}"
+            print(f"ERROR normalizing item {i}: {error_msg}")
+            all_errors.append(error_msg)
             normalized_items.append(item)  # Keep original on error
     
     # Update context with normalized items
@@ -1192,6 +1727,12 @@ async def finalize_extraction(args: Dict[str, Any]) -> Dict[str, Any]:
     ctx.state.final_extractions = list(ctx.state.draft_extractions)
     ctx.state.is_complete = True
     
+    # SAVE CHECKPOINT 04 (Normalization/Final)
+    _dump_checkpoint("04_normalization_output.json", {
+        "final_extractions": ctx.state.final_extractions,
+        "is_complete": True
+    })
+
     # Calculate coverage statistics
     items_count = len(ctx.state.final_extractions)
     
@@ -1277,3 +1818,148 @@ async def get_tier2_coverage(args: Dict[str, Any]) -> Dict[str, Any]:
     return {
         "content": [{"type": "text", "text": json.dumps(result, indent=2)}]
     }
+
+
+# =============================================================================
+# NEW: TOOLUNIVERSE INSPIRED LOOKUPS (Direct API Implementation - MCP TOOLS)
+# =============================================================================
+
+@tool(
+    "lookup_rxnorm",
+    "Lookup a drug in RxNorm to get its RXCUI and canonical name.",
+    {"drug_name": str}
+)
+async def lookup_rxnorm(args: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Lookup drug in RxNorm to get RXCUI and canonical name.
+    """
+    drug_name = args.get("drug_name")
+    if not drug_name:
+        return {"content": [{"type": "text", "text": "Error: Empty drug name"}]}
+        
+    # Use internal helper
+    result = await _lookup_rxnorm_internal(drug_name)
+    return {"content": [{"type": "text", "text": json.dumps(result, indent=2)}]}
+
+
+@tool(
+    "lookup_efo",
+    "Lookup a disease in EFO via EBI OLS API.",
+    {"disease_name": str}
+)
+async def lookup_efo(args: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Lookup disease in EFO via EBI OLS API.
+    """
+    disease_name = args.get("disease_name")
+    if not disease_name:
+        return {"content": [{"type": "text", "text": "Error: Empty disease name"}]}
+        
+    # Use internal helper
+    result = await _lookup_efo_internal(disease_name)
+    return {"content": [{"type": "text", "text": json.dumps(result, indent=2)}]}
+
+
+@tool(
+    "lookup_safety_profile",
+    "Lookup top adverse events for a drug via OpenFDA (FAERS).",
+    {"drug_name": str}
+)
+async def lookup_safety_profile(args: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Lookup top adverse events for a drug via OpenFDA (FAERS).
+    """
+    drug_name = args.get("drug_name")
+    if not drug_name:
+        return {"content": [{"type": "text", "text": "Error: Empty drug name"}]}
+        
+    # Use internal helper
+    result = await _lookup_safety_profile_internal(drug_name)
+    return {"content": [{"type": "text", "text": json.dumps(result, indent=2)}]}
+
+
+@tool(
+    "lookup_gene_entrez",
+    "Lookup Entrez Gene ID for a gene symbol (e.g. BRAF).",
+    {"gene_symbol": str}
+)
+async def lookup_gene_entrez(args: Dict[str, Any]) -> Dict[str, Any]:
+    gene_symbol = args.get("gene_symbol")
+    if not gene_symbol: return {"content": [{"type": "text", "text": "Error: Empty gene symbol"}]}
+    result = lookup_gene_entrez_id(gene_symbol)
+    return {"content": [{"type": "text", "text": json.dumps(result, indent=2)}]}
+
+
+@tool(
+    "lookup_disease_doid",
+    "Lookup Disease Ontology ID (DOID) for a disease name via OLS.",
+    {"disease_name": str}
+)
+async def lookup_disease_doid_tool(args: Dict[str, Any]) -> Dict[str, Any]:
+    disease_name = args.get("disease_name")
+    if not disease_name: return {"content": [{"type": "text", "text": "Error: Empty disease name"}]}
+    result = lookup_disease_doid(disease_name)
+    return {"content": [{"type": "text", "text": json.dumps(result, indent=2)}]}
+
+
+@tool(
+    "lookup_therapy_ncit",
+    "Lookup NCI Thesaurus ID for a therapy/drug name via OLS.",
+    {"therapy_name": str}
+)
+async def lookup_therapy_ncit(args: Dict[str, Any]) -> Dict[str, Any]:
+    therapy_name = args.get("therapy_name")
+    if not therapy_name: return {"content": [{"type": "text", "text": "Error: Empty therapy name"}]}
+    result = await lookup_therapy_ncit_id_async(therapy_name)
+    return {"content": [{"type": "text", "text": json.dumps(result, indent=2)}]}
+
+
+@tool(
+    "lookup_variant_info",
+    "Lookup variant information (coordinates, HGVS, ClinVar) from MyVariant.info.",
+    {"gene_symbol": str, "variant_name": str}
+)
+async def lookup_variant_info_tool(args: Dict[str, Any]) -> Dict[str, Any]:
+    gene_symbol = args.get("gene_symbol")
+    variant_name = args.get("variant_name")
+    if not gene_symbol or not variant_name: 
+        return {"content": [{"type": "text", "text": "Error: Missing gene or variant"}]}
+    result = await lookup_variant_info_async(gene_symbol, variant_name)
+    return {"content": [{"type": "text", "text": json.dumps(result, indent=2)}]}
+
+
+@tool(
+    "lookup_clinical_trial",
+    "Lookup Clinical Trial details (status, title, phases) by NCT ID.",
+    {"nct_id": str}
+)
+async def lookup_clinical_trial(args: Dict[str, Any]) -> Dict[str, Any]:
+    nct_id = args.get("nct_id")
+    if not nct_id: return {"content": [{"type": "text", "text": "Error: Empty NCT ID"}]}
+    result = await _lookup_clinical_trial_internal(nct_id)
+    return {"content": [{"type": "text", "text": json.dumps(result, indent=2)}]}
+
+
+@tool(
+    "lookup_hpo",
+    "Lookup Human Phenotype Ontology (HPO) ID for a phenotype name.",
+    {"phenotype_name": str}
+)
+async def lookup_hpo(args: Dict[str, Any]) -> Dict[str, Any]:
+    phenotype_name = args.get("phenotype_name")
+    if not phenotype_name: return {"content": [{"type": "text", "text": "Error: Empty phenotype name"}]}
+    result = await _lookup_hpo_internal(phenotype_name)
+    return {"content": [{"type": "text", "text": json.dumps(result, indent=2)}]}
+
+
+@tool(
+    "lookup_pmcid",
+    "Lookup PMCID for a given PMID using NCBI ID Converter.",
+    {"pmid": str}
+)
+async def lookup_pmcid(args: Dict[str, Any]) -> Dict[str, Any]:
+    pmid = args.get("pmid")
+    if not pmid: return {"content": [{"type": "text", "text": "Error: Empty PMID"}]}
+    result = await _lookup_pmcid_internal(pmid)
+    return {"content": [{"type": "text", "text": json.dumps(result, indent=2)}]}
+

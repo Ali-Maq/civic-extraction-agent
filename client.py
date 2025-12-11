@@ -89,15 +89,60 @@ Delegate to "critic":
 If NEEDS_REVISION: increment_iteration → Extractor → Critic
 Maximum {MAX_ITERATIONS} iterations.
 
-### Finalization
-After APPROVED:
-1. normalize_extractions
-2. finalize_extraction
-
-## CRITICAL RULES
-- Use Task tool to delegate to agents
-- All agents must use get_paper_content (TEXT only)
+    ### Finalization
+    After APPROVED:
+    1. Delegate to "normalizer" to standardize IDs
+    2. finalize_extraction
+    
+    ## CRITICAL RULES
+    - Use Task tool to delegate to agents
+    - All agents must use get_paper_content (TEXT only)
 """
+
+# Normalizer Agent - Works from TEXT & TOOLS
+NORMALIZER_AGENT = AgentDefinition(
+    description="Standardizes entities to ontologies (RxNorm, EFO, etc.)",
+    prompt="""You are an expert Clinical Data Normalizer.
+Your goal is to standardize extracted evidence items to standard ontologies.
+
+## YOUR PROCESS
+1. **Review**: Call `get_draft_extractions`.
+2. **Normalize**: For each item, lookup missing IDs using your tools.
+   **MANDATORY**: You MUST attempt to find ALL applicable IDs for each entity type. Do not stop at the first match.
+   
+   - Gene -> `lookup_gene_entrez`
+   - Variant -> `lookup_variant_info`
+   - Drug -> `lookup_rxnorm` AND `lookup_therapy_ncit` AND `lookup_safety_profile`
+   - Disease -> `lookup_efo` AND `lookup_disease_doid`
+   - Trial -> `lookup_clinical_trial`
+   - Phenotype -> `lookup_hpo`
+   - PMID -> `lookup_pmcid`
+
+3. **INTELLIGENT ERROR HANDLING**:
+   - If a tool returns "Not found" or error:
+     - **Analyze**: Check for typos (e.g. "Mellanoma"), extra words, or synonyms.
+     - **RETRY**: Call the tool again with the corrected term.
+     - Only give up after retrying.
+
+4. **Save**: Call `save_evidence_items` with the updated list.
+5. **Finish**: Call `finalize_extraction`.
+""",
+    tools=[
+        "mcp__civic_tools__get_draft_extractions",
+        "mcp__civic_tools__save_evidence_items",
+        "mcp__civic_tools__finalize_extraction",
+        "mcp__civic_tools__lookup_rxnorm",
+        "mcp__civic_tools__lookup_efo",
+        "mcp__civic_tools__lookup_safety_profile",
+        "mcp__civic_tools__lookup_gene_entrez",
+        "mcp__civic_tools__lookup_variant_info_tool",
+        "mcp__civic_tools__lookup_therapy_ncit",
+        "mcp__civic_tools__lookup_disease_doid_tool",
+        "mcp__civic_tools__lookup_clinical_trial",
+        "mcp__civic_tools__lookup_hpo",
+        "mcp__civic_tools__lookup_pmcid",
+    ]
+)
 
 # Planner Agent - Works from TEXT
 PLANNER_AGENT = AgentDefinition(
@@ -242,6 +287,7 @@ class CivicExtractionClient:
                     "planner": PLANNER_AGENT,
                     "extractor": EXTRACTOR_AGENT,
                     "critic": CRITIC_AGENT,
+                    "normalizer": NORMALIZER_AGENT,
                 },
                 allowed_tools=ORCHESTRATOR_AND_SUBAGENT_TOOLS,
                 permission_mode="acceptEdits",

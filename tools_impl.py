@@ -32,8 +32,20 @@ from tools.validation_tools import (
 from tools.normalization_tools import (
     normalize_extractions as _normalize,
     finalize_extraction as _finalize,
-    get_tier2_coverage as _get_coverage
+    get_tier2_coverage as _get_coverage,
+    # New granular lookups
+    lookup_rxnorm,
+    lookup_efo,
+    lookup_safety_profile,
+    lookup_gene_entrez,
+    lookup_variant_info_tool as lookup_variant_info,
+    lookup_therapy_ncit,
+    lookup_disease_doid_tool as lookup_disease_doid,
+    lookup_clinical_trial,
+    lookup_hpo,
+    lookup_pmcid
 )
+
 from tools.paper_content_tools import (
     _generate_paper_context_text
 )
@@ -248,35 +260,8 @@ async def increment_iteration(args: Dict[str, Any]) -> Dict[str, Any]:
     return {"content": [{"type": "text", "text": json.dumps(result)}]}
 
 
-@tool(
-    "normalize_extractions",
-    "Add database IDs to extractions",
-    {}
-)
-async def normalize_extractions(args: Dict[str, Any]) -> Dict[str, Any]:
-    """Normalize extractions."""
-    result = _normalize()
-    return {"content": [{"type": "text", "text": json.dumps(result)}]}
-
-
-@tool(
-    "finalize_extraction",
-    "Finalize the extraction",
-    {}
-)
-async def finalize_extraction(args: Dict[str, Any]) -> Dict[str, Any]:
-    """Finalize extraction."""
-    result = _finalize()
-    return {"content": [{"type": "text", "text": json.dumps(result)}]}
-
-
-@tool(
-    "get_tier2_coverage",
-    "Get Tier 2 field coverage statistics",
-    {}
-)
-async def get_tier2_coverage(args: Dict[str, Any]) -> Dict[str, Any]:
-    """Get tier 2 coverage."""
-    result = _get_coverage()
-    return {"content": [{"type": "text", "text": json.dumps(result)}]}
+# Normalization tools are already decorated in tools/normalization_tools.py
+normalize_extractions = _normalize
+finalize_extraction = _finalize
+get_tier2_coverage = _get_coverage
 

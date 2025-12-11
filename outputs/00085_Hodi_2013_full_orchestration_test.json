@@ -1,0 +1,136 @@
+{
+  "paper_id": "00085_Hodi_2013",
+  "evidence_items": [
+    {
+      "feature_names": [
+        "KIT"
+      ],
+      "variant_names": [
+        "MUTATION"
+      ],
+      "disease_name": "Melanoma",
+      "evidence_type": "PREDICTIVE",
+      "evidence_level": "B",
+      "evidence_direction": "SUPPORTS",
+      "evidence_significance": "SENSITIVITY/RESPONSE",
+      "evidence_description": "In a phase II trial of 24 evaluable patients with metastatic mucosal, acral, or chronically sun-damaged melanoma, KIT mutations were significantly predictive of response to imatinib. The best overall response rate (BORR) was 54% (7 of 13) in KIT-mutated melanomas compared to 0% in KIT-amplified only melanomas, which was statistically significantly different (p<0.05). The overall disease control rate was also significantly higher in mutated versus amplified tumors (77% vs 18%). Patients received imatinib 400 mg orally once per day until progression.",
+      "citation_text": "BORR was significantly greater than the hypothesized null of 5% and statistically significantly different by mutation status (7 of 13 or 54% KIT-mutated v 0% KIT-amplified only). The overall disease control rate was 50% but varied significantly by KIT mutation status (77% mutated v 18% amplified).",
+      "therapy_names": [
+        "Imatinib"
+      ],
+      "gene_entrez_ids": [
+        "3815"
+      ],
+      "disease_efo_id": "EFO_0002617",
+      "therapy_ncit_ids": [
+        "NCIT:C62035"
+      ],
+      "therapy_rxcui": "282388"
+    },
+    {
+      "feature_names": [
+        "KIT"
+      ],
+      "variant_names": [
+        "MUTATION",
+        "AMPLIFICATION"
+      ],
+      "disease_name": "Melanoma",
+      "evidence_type": "PREDICTIVE",
+      "evidence_level": "B",
+      "evidence_direction": "SUPPORTS",
+      "evidence_significance": "SENSITIVITY/RESPONSE",
+      "evidence_description": "In a phase II trial of imatinib in metastatic melanoma, five patients (21%) had tumors with both KIT mutations and amplifications. This combined mutation+amplification subgroup is part of the broader KIT-mutated cohort (n=13 total including 8 with mutation only and 5 with both) that demonstrated a 54% response rate and 77% disease control rate with imatinib 400 mg daily. The presence of both alterations appears to behave clinically similar to mutation-only cases, as the aggregate mutated group (which includes this combined subgroup) showed significantly better outcomes than amplification-only cases.",
+      "citation_text": "Eight patients (33%) had tumors with KIT mutations, 11 (46%) with amplifications, and five (21%) with both. BORR was significantly greater than the hypothesized null of 5% and statistically significantly different by mutation status (7 of 13 or 54% KIT-mutated v 0% KIT-amplified only).",
+      "therapy_names": [
+        "Imatinib"
+      ],
+      "gene_entrez_ids": [
+        "3815"
+      ],
+      "disease_efo_id": "EFO_0002617",
+      "therapy_ncit_ids": [
+        "NCIT:C62035"
+      ],
+      "therapy_rxcui": "282388"
+    },
+    {
+      "feature_names": [
+        "KIT"
+      ],
+      "variant_names": [
+        "AMPLIFICATION"
+      ],
+      "disease_name": "Melanoma",
+      "evidence_type": "PREDICTIVE",
+      "evidence_level": "B",
+      "evidence_direction": "DOES_NOT_SUPPORT",
+      "evidence_significance": "RESISTANCE",
+      "evidence_description": "In a phase II trial of 24 evaluable patients with metastatic melanoma, KIT amplification without mutation did not predict response to imatinib. None of the 11 patients with KIT amplification alone responded to imatinib (0% response rate), which was statistically significantly different from the 54% response rate in KIT-mutated tumors. The disease control rate was also significantly lower (18% amplified vs 77% mutated).",
+      "citation_text": "BORR was significantly greater than the hypothesized null of 5% and statistically significantly different by mutation status (7 of 13 or 54% KIT-mutated v 0% KIT-amplified only). The overall disease control rate was 50% but varied significantly by KIT mutation status (77% mutated v 18% amplified). Imatinib can be effective when tumors harbor KIT mutations, but not if KIT is amplified only.",
+      "therapy_names": [
+        "Imatinib"
+      ],
+      "gene_entrez_ids": [
+        "3815"
+      ],
+      "disease_efo_id": "EFO_0002617",
+      "therapy_ncit_ids": [
+        "NCIT:C62035"
+      ],
+      "therapy_rxcui": "282388"
+    },
+    {
+      "feature_names": [
+        "NRAS"
+      ],
+      "variant_names": [
+        "MUTATION"
+      ],
+      "disease_name": "Melanoma",
+      "evidence_type": "PREDICTIVE",
+      "evidence_level": "B",
+      "evidence_direction": "SUPPORTS",
+      "evidence_significance": "RESISTANCE",
+      "evidence_description": "In a phase II trial of imatinib in KIT-altered melanomas, four patients harbored pretreatment NRAS mutations. These NRAS mutations were identified as potential mechanisms of therapeutic resistance to imatinib, suggesting that concurrent NRAS mutations may confer resistance in otherwise KIT-mutated melanomas.",
+      "citation_text": "Four patients harbored pretreatment NRAS mutations, and one patient acquired increased KIT amplification after treatment. NRAS mutations and KIT copy number gain may be mechanisms of therapeutic resistance to imatinib.",
+      "therapy_names": [
+        "Imatinib"
+      ],
+      "gene_entrez_ids": [
+        "4893"
+      ],
+      "disease_efo_id": "EFO_0002617",
+      "therapy_ncit_ids": [
+        "NCIT:C62035"
+      ],
+      "therapy_rxcui": "282388"
+    },
+    {
+      "feature_names": [
+        "KIT"
+      ],
+      "variant_names": [
+        "COPY NUMBER GAIN"
+      ],
+      "disease_name": "Melanoma",
+      "evidence_type": "PREDICTIVE",
+      "evidence_level": "D",
+      "evidence_direction": "SUPPORTS",
+      "evidence_significance": "RESISTANCE",
+      "evidence_description": "In a phase II trial of imatinib in KIT-altered melanomas, one patient acquired increased KIT amplification (copy number gain) after treatment. This acquired KIT copy number gain was identified as a potential mechanism of therapeutic resistance to imatinib, suggesting it may be an adaptive resistance mechanism.",
+      "citation_text": "Four patients harbored pretreatment NRAS mutations, and one patient acquired increased KIT amplification after treatment. NRAS mutations and KIT copy number gain may be mechanisms of therapeutic resistance to imatinib.",
+      "therapy_names": [
+        "Imatinib"
+      ],
+      "gene_entrez_ids": [
+        "3815"
+      ],
+      "disease_efo_id": "EFO_0002617",
+      "therapy_ncit_ids": [
+        "NCIT:C62035"
+      ],
+      "therapy_rxcui": "282388"
+    }
+  ]
+}

@@ -92,7 +92,7 @@ EXTRACTION PLAN:
 1. ALWAYS run Reader FIRST before any other agent
 2. ALWAYS include paper_context_text in ALL tasks to Planner/Extractor/Critic
 3. NEVER ask Planner/Extractor/Critic to read pages - they use the text context
-4. After APPROVED, call normalize_extractions then finalize_extraction
+4. After APPROVED, delegate to "normalizer" then finalize_extraction
 5. Maximum 3 iterations of Extractor/Critic loop
 
 ## WORKFLOW SUMMARY
@@ -109,7 +109,7 @@ Critic → APPROVE/NEEDS_REVISION/REJECT
 If not APPROVED and iterations < 3:
     → Back to Extractor with feedback
     ↓
-normalize_extractions
+normalize_extractions (DELEGATE TO NORMALIZER AGENT)
     ↓
 finalize_extraction
 ```
@@ -169,6 +169,12 @@ Using the paper content above:
    - Statistics with confidence intervals
    - Extraction reasoning
 3. Call save_evidence_items with your extractions
+
+## NORMALIZATION HINT
+Downstream tools will attempt to normalize your extractions to standard ontologies (RxNorm, EFO, NCIt).
+- Use specific, standard names for Drugs and Diseases where possible.
+- Avoid abbreviations if the full name is available.
+- For Variants, capture specific amino acid changes (e.g., V600E) if present.
 
 IMPORTANT: Work from the extracted content above. Do NOT read paper pages.
 All text, tables, figures, and statistics are already in the content."""

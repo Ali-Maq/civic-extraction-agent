@@ -6,12 +6,47 @@ MCP tools for managing extraction state (plans, items, critiques).
 """
 
 import json
+import os
+from datetime import datetime
+from pathlib import Path
 from claude_agent_sdk import tool
 from typing import Any
 
 from context import require_context
+from context.state import ExtractionPlan
 from schemas import REQUIRED_FIELDS
+from config import OUTPUTS_DIR
 
+def _dump_checkpoint(filename: str, extra_data: dict = None):
+    """Helper to save checkpoint to disk."""
+    try:
+        ctx = require_context()
+        if not ctx.paper: return # Can't save if paper_id unknown
+        
+        paper_id = ctx.paper.paper_id
+        checkpoint_dir = OUTPUTS_DIR / "checkpoints" / paper_id
+        checkpoint_dir.mkdir(parents=True, exist_ok=True)
+        
+        checkpoint_path = checkpoint_dir / filename
+        
+        # Base data from context state
+        data = {
+            "paper_id": paper_id,
+            "timestamp": datetime.now().isoformat(),
+            # Include minimal context to allow resume
+            "paper_content": ctx.paper_content,
+            # "paper_content_text": ctx.paper_content_text, # Optional, can be regenerated
+        }
+        
+        # Merge extra data
+        if extra_data:
+            data.update(extra_data)
+            
+        with open(checkpoint_path, "w") as f:
+            json.dump(data, f, indent=2, default=str)
+            
+    except Exception as e:
+        print(f"Warning: Failed to save checkpoint {filename}: {e}")
 
 @tool(
     "save_extraction_plan",
@@ -56,13 +91,16 @@ async def save_extraction_plan(args: dict[str, Any]) -> dict[str, Any]:
         }
     
     # Save to context
-    ctx.state.extraction_plan = plan
+    ctx.state.extraction_plan = ExtractionPlan(**plan)
     
     # Update paper info
     if ctx.paper:
         ctx.paper.paper_type = plan["paper_type"]
         ctx.paper.expected_item_count = plan["expected_items"]
     
+    # SAVE CHECKPOINT 02
+    _dump_checkpoint("02_planner_output.json", {"plan": plan})
+
     # Generate summary
     summary = f"Plan saved: {plan['paper_type']}, expecting {plan['expected_items']} items"
     
@@ -167,6 +205,14 @@ async def save_evidence_items(args: dict[str, Any]) -> dict[str, Any]:
     # Save to context
     ctx.state.draft_extractions = items
     
+    # SAVE CHECKPOINT 03
+    _dump_checkpoint("03_extractor_output.json", {
+        "extraction": {
+            "draft_extractions": items,
+            "iteration": ctx.state.iteration_count
+        }
+    })
+
     # Calculate stats
     valid_count = sum(1 for v in validation_summary if v["valid"])
     invalid_count = len(items) - valid_count
@@ -204,9 +250,17 @@ async def get_draft_extractions(args: dict[str, Any]) -> dict[str, Any]:
     
     # Include plan context
     if ctx.state.extraction_plan:
+        # Handle Pydantic model or dict
+        if hasattr(ctx.state.extraction_plan, "paper_type"):
+            paper_type = ctx.state.extraction_plan.paper_type
+            expected_items = ctx.state.extraction_plan.expected_items
+        else:
+            paper_type = ctx.state.extraction_plan.get("paper_type")
+            expected_items = ctx.state.extraction_plan.get("expected_items")
+            
         result["plan"] = {
-            "paper_type": ctx.state.extraction_plan.get("paper_type"),
-            "expected_items": ctx.state.extraction_plan.get("expected_items"),
+            "paper_type": paper_type,
+            "expected_items": expected_items,
         }
     
     # Include previous critique if any

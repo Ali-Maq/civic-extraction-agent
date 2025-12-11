@@ -55,7 +55,6 @@ async def run_planner_test(paper_json_path):
     server = build_civic_mcp_server()
     
     options = ClaudeAgentOptions(
-        model=PLANNER_MODEL,
         system_prompt=PLANNER_AGENT.prompt,
         mcp_servers={"civic_tools": server},
         allowed_tools=PLANNER_AGENT.tools,
@@ -68,6 +67,7 @@ async def run_planner_test(paper_json_path):
     
     print("\n--- Starting Planner ---")
     async with ClaudeSDKClient(options=options) as client:
+        # Wrap prompt in message structure if needed, or string is fine for simple query
         await client.query(prompt)
         async for message in client.receive_response():
             if isinstance(message, AssistantMessage):
@@ -81,8 +81,35 @@ async def run_planner_test(paper_json_path):
     
     # Check if plan was saved
     if context.state.extraction_plan:
-        print("✅ Plan saved successfully:")
-        print(json.dumps(context.state.extraction_plan, indent=2))
+        print("✅ Plan saved successfully.")
+        
+        # Save Checkpoint
+        from config import OUTPUTS_DIR
+        paper_id = saved_data['paper_id']
+        checkpoint_dir = OUTPUTS_DIR / "checkpoints" / paper_id
+        checkpoint_dir.mkdir(parents=True, exist_ok=True)
+        
+        checkpoint_path = checkpoint_dir / "02_planner_output.json"
+        
+        # Merge previous state with new plan
+        output_data = saved_data.copy()
+        
+        # Convert Pydantic model or dict
+        if isinstance(context.state.extraction_plan, dict):
+            plan_dict = context.state.extraction_plan
+        elif hasattr(context.state.extraction_plan, "model_dump"):
+            plan_dict = context.state.extraction_plan.model_dump()
+        else:
+            plan_dict = context.state.extraction_plan.__dict__
+            
+        output_data['plan'] = plan_dict
+        
+        with open(checkpoint_path, "w") as f:
+            json.dump(output_data, f, indent=2, default=str)
+            
+        print(f"💾 Checkpoint saved: {checkpoint_path}")
+        print(f"➡️  Next step: python civic_extraction/tests/test_extractor.py {checkpoint_path}")
+        
     else:
         print("❌ No plan saved.")
 
