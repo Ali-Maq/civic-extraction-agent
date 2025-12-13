@@ -255,7 +255,7 @@ async def run_extraction(paper_id: str, papers_dir: str = None, verbose: bool = 
         if verbose:
             print("\n--- Phase 2: Orchestrator (Text Analysis) ---")
         await client.run_orchestrator_phase()
-    
+
         # If Critic requested revisions, let orchestrator loop until APPROVE or max_iterations
         # This relies on agent logic to delegate back to Extractor with the critique context.
         safety_counter = 0
@@ -272,17 +272,46 @@ async def run_extraction(paper_id: str, papers_dir: str = None, verbose: bool = 
             # Avoid runaway loops in case agents don't converge
             if safety_counter > context.state.max_iterations + 1:
                 break
-    
+
+        # Guard: if orchestration never reached APPROVE/complete, allow additional runs
+        guard_counter = 0
+        critique_assessment = (context.state.critique or {}).get("overall_assessment")
+        while (
+            (
+                not context.state.is_complete
+                or critique_assessment is None
+                or critique_assessment == "REJECT"
+            )
+            and context.state.iteration_count < context.state.max_iterations
+        ):
+            guard_counter += 1
+            if verbose:
+                reason = (
+                    "incomplete run"
+                    if not context.state.is_complete
+                    else f"critique status: {critique_assessment or 'missing'}"
+                )
+                print(
+                    "\n--- Orchestrator guard re-run "
+                    f"(iteration {context.state.iteration_count + 1}, {reason}) ---"
+                )
+            await client.run_orchestrator_phase()
+            critique_assessment = (context.state.critique or {}).get("overall_assessment")
+            if guard_counter > context.state.max_iterations + 1:
+                break
+
     except Exception as e:
         import traceback
         logger.error(f"Extraction error: {e}")
         if verbose:
             traceback.print_exc()
         return {"error": str(e), "paper_id": paper_id}
-    
+
     # Compile results
     end_time = datetime.now()
-    items = context.state.final_extractions if context.state.is_complete else context.state.draft_extractions
+    critique_assessment = (context.state.critique or {}).get("overall_assessment")
+    is_finalized = context.state.is_complete and critique_assessment == "APPROVE"
+    items = context.state.final_extractions if is_finalized else context.state.draft_extractions
     
     reader_metadata = getattr(context, "paper_content", {}) or {}
     reader_author = _normalize_authors(reader_metadata.get("authors"))
@@ -340,16 +369,37 @@ async def run_extraction(paper_id: str, papers_dir: str = None, verbose: bool = 
         },
         "log_file": str(log_file)
     }
-    
-    # Save output
+
+    duration = (end_time - start_time).total_seconds()
+
+    if not is_finalized:
+        error_msg = (
+            "Extraction incomplete or not approved after maximum iterations"
+            if context.state.iteration_count >= context.state.max_iterations
+            else "Extraction incomplete or missing approval"
+        )
+        logger.warning(
+            f"=== PARTIAL: {len(items)} draft items in {duration:.1f}s | {error_msg} ==="
+        )
+        if verbose:
+            print(f"\n⚠️ Partial run: {len(items)} draft items in {duration:.1f}s")
+            print(f"Reason: {error_msg}")
+        return {
+            "error": error_msg,
+            "paper_id": paper_id,
+            "iterations": context.state.iteration_count,
+            "critique": context.state.critique,
+            "draft_extractions": context.state.draft_extractions,
+        }
+
+    # Save output (only when finalized and approved)
     output_path = Path(OUTPUTS_DIR) / f"{paper_id}_extraction.json"
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with open(output_path, "w") as f:
         json.dump(results, f, indent=2, default=str)
-    
-    duration = (end_time - start_time).total_seconds()
+
     logger.info(f"=== COMPLETE: {len(items)} items in {duration:.1f}s ===")
-    
+
     if verbose:
         print(f"\n✓ Complete: {len(items)} items in {duration:.1f}s")
         print(f"Output: {output_path}")
