@@ -83,35 +83,76 @@ civic_extraction/
 
 ## 🚀 Usage
 
-### Setup
-The project includes a pre-configured virtual environment in `civic_extraction/.venv` (or `.venv311`).
+### Prerequisites
+
+**Python Version:** This project requires **Python 3.11 or higher**. The `claude-agent-sdk` requires Python >=3.10, but we recommend 3.11 for compatibility.
 
 ```bash
-# Activate the environment
-source .venv311/bin/activate
-# OR
-source civic_extraction/.venv/bin/activate
+# Check your Python version
+python3.11 --version  # Should show Python 3.11.x or higher
 ```
 
-2.  **Configuration (.env):**
-    Create a `.env` file in the `civic_extraction/` root directory with your API keys.
-    
-    ```bash
-    # .env example
-    ANTHROPIC_API_KEY=sk-ant-api03-...
-    # Optional settings
-    DEFAULT_MODEL=claude-3-5-sonnet-20241022
-    ```
+### Setup
+
+1. **Create and activate a virtual environment:**
+
+```bash
+# Create venv with Python 3.11
+python3.11 -m venv .venv
+
+# Activate the environment
+source .venv/bin/activate  # On macOS/Linux
+# OR
+.venv\Scripts\activate  # On Windows
+```
+
+2. **Install dependencies:**
+
+```bash
+# Install from pyproject.toml
+pip install -e .
+
+# Or install core dependencies manually
+pip install claude-agent-sdk==0.1.14 PyMuPDF aiohttp pydantic python-dotenv
+```
+
+3. **Configuration (.env):**
+   Create a `.env` file in the project root directory with your API keys.
+   
+   ```bash
+   # .env example
+   ANTHROPIC_API_KEY=sk-ant-api03-...
+   # Optional settings
+   DEFAULT_MODEL=claude-3-5-sonnet-20241022
+   MAX_ITERATIONS=3
+   MAX_TURNS=50
+   ```
 
 ### Running Extraction
-Run the pipeline on a specific paper (PDF or folder). The system supports **Smart Resume**: if a Reader checkpoint exists, it skips the expensive image reading.
+
+**Important:** The script expects a `paper_id` (not a full PDF path) and uses the `PAPERS_DIR` environment variable to locate PDFs.
 
 ```bash
-# Using a direct PDF path
-python civic_extraction/scripts/run_extraction.py /path/to/paper.pdf
+# Set PAPERS_DIR to your papers directory
+export PAPERS_DIR=/path/to/your/papers/directory
+
+# Run extraction on a paper (using paper_id derived from PDF filename)
+python3.11 scripts/run_extraction.py <paper_id>
+
+# Example: If your PDF is at data/papers/Dutta_et_al-2024-Blood_Neoplasia.pdf
+export PAPERS_DIR=$(pwd)/data/papers
+python3.11 scripts/run_extraction.py Dutta_et_al-2024-Blood_Neoplasia
 ```
 
-**Paper ID derivation & checkpoints:** When you pass a PDF path, `run_extraction.py` derives `paper_id` from the PDF filename. If the PDF sits in a shared folder, the script will create/use a subfolder named after the PDF stem to avoid checkpoint collisions. Each run writes per-paper checkpoints under `outputs/checkpoints/<paper_id>/01-04_*.json` and the final result to `outputs/<paper_id>_extraction.json`.
+**Paper ID derivation & checkpoints:** 
+- The `paper_id` is derived from the PDF filename (without extension)
+- If the PDF is in a subfolder (e.g., `data/papers/s41591-023-02491-5/s41591-023-02491-5.pdf`), the `paper_id` is `s41591-023-02491-5`
+- Each run creates per-paper checkpoints under `outputs/checkpoints/<paper_id>/01-04_*.json`
+- Final results are saved to `outputs/<paper_id>_extraction.json`
+- The system supports **Smart Resume**: if a Reader checkpoint exists, it skips the expensive image reading phase
+
+**Context Normalization Fix:**
+The system now automatically normalizes legacy Reader output formats (where `sections` might be a string instead of a structured list). This ensures the full paper text is always available to downstream agents, preventing "abstract-only" extraction failures.
 
 ### Outputs
 Results are saved to `civic_extraction/outputs/{paper_id}_extraction.json`.

@@ -8,12 +8,77 @@ These tools allow the Reader agent to save extracted paper content,
 and other agents to retrieve it.
 """
 
-from typing import Any, Dict
+from typing import Any, Dict, List
 import json
 from claude_agent_sdk import tool
 
 from context import get_current_context
 from hooks.logging_hooks import logger
+
+
+def _normalize_authors_list(authors: Any) -> List[str]:
+    """Coerce authors into a clean list of strings."""
+    if not authors:
+        return []
+    if isinstance(authors, list):
+        return [str(a).strip() for a in authors if str(a).strip()]
+    # If a single string, split on commas/semicolons
+    if isinstance(authors, str):
+        parts = [p.strip() for p in authors.replace(";", ",").split(",")]
+        return [p for p in parts if p]
+    return [str(authors).strip()]
+
+
+def _normalize_sections_data(sections: Any) -> List[Dict[str, Any]]:
+    """
+    Ensure sections are a list of dicts with name/content/page_numbers.
+    Handles legacy cases where the Reader returned a single string blob.
+    """
+    if not sections:
+        return []
+
+    normalized = []
+
+    # Already in expected format
+    if isinstance(sections, list):
+        for idx, sec in enumerate(sections):
+            if isinstance(sec, dict):
+                normalized.append(
+                    {
+                        "name": sec.get("name") or f"Section {idx+1}",
+                        "page_numbers": sec.get("page_numbers", []),
+                        "content": sec.get("content", ""),
+                    }
+                )
+            else:
+                # Plain string inside a list
+                normalized.append(
+                    {
+                        "name": f"Section {idx+1}",
+                        "page_numbers": [],
+                        "content": str(sec),
+                    }
+                )
+        return normalized
+
+    # Single string blob from legacy Reader output
+    if isinstance(sections, str):
+        return [
+            {
+                "name": "Full Text",
+                "page_numbers": [],
+                "content": sections,
+            }
+        ]
+
+    # Fallback: wrap unknown type
+    return [
+        {
+            "name": "Section",
+            "page_numbers": [],
+            "content": str(sections),
+        }
+    ]
 
 
 @tool(
@@ -46,12 +111,12 @@ async def save_paper_content(args: Dict[str, Any]) -> Dict[str, Any]:
     """
     # Extract arguments
     title = args.get("title", "")
-    authors = args.get("authors", [])
+    authors = _normalize_authors_list(args.get("authors", []))
     journal = args.get("journal", "")
     year = args.get("year", 0)
     paper_type = args.get("paper_type", "")
     abstract = args.get("abstract", "")
-    sections = args.get("sections", [])
+    sections = _normalize_sections_data(args.get("sections", []))
     tables = args.get("tables", [])
     figures = args.get("figures", [])
     statistics = args.get("statistics", [])
@@ -85,10 +150,7 @@ async def save_paper_content(args: Dict[str, Any]) -> Dict[str, Any]:
     # Sync basic metadata into PaperInfo so final outputs aren't "Unknown"
     if context.paper:
         if authors:
-            if isinstance(authors, list):
-                context.paper.author = ", ".join(authors)
-            else:
-                context.paper.author = str(authors)
+            context.paper.author = ", ".join(authors)
         if year:
             context.paper.year = str(year)
         if paper_type:
@@ -185,7 +247,7 @@ def _generate_paper_context_text(content: dict) -> str:
         "=" * 80,
         "",
         f"TITLE: {content.get('title', 'Unknown')}",
-        f"AUTHORS: {', '.join(content.get('authors', []) if isinstance(content.get('authors'), list) else [])}",
+        f"AUTHORS: {', '.join(_normalize_authors_list(content.get('authors')))}",
         f"JOURNAL: {content.get('journal', 'Unknown')} ({content.get('year', '?')})",
         f"PAPER TYPE: {content.get('paper_type', 'Unknown')}",
     ]
@@ -326,19 +388,15 @@ def _generate_paper_context_text(content: dict) -> str:
             lines.append(stat_str)
     
     # Sections (full text)
-    if content.get('sections'):
+    normalized_sections = _normalize_sections_data(content.get('sections'))
+    if normalized_sections:
         lines.extend([
             "",
             "=" * 40,
             "FULL SECTION CONTENT",
             "=" * 40,
         ])
-        sections = content['sections'] if isinstance(content['sections'], list) else []
-        for section in sections:
-            if not isinstance(section, dict):
-                lines.append(f"\n[Malformed Section]: {str(section)}")
-                continue
-                
+        for section in normalized_sections:
             page_nums = section.get('page_numbers', [])
             page_str = ", ".join(str(p) for p in page_nums) if isinstance(page_nums, list) else str(page_nums)
             lines.extend([

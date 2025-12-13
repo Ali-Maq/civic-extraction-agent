@@ -32,9 +32,9 @@ from client import CivicExtractionClient
 
 async def run_extraction(paper_id: str, papers_dir: str = None, verbose: bool = True) -> dict:
     """Run extraction with Reader-first architecture."""
-
+    
     start_time = datetime.now()
-
+    
     def _normalize_authors(value):
         if not value:
             return None
@@ -138,6 +138,20 @@ async def run_extraction(paper_id: str, papers_dir: str = None, verbose: bool = 
             with open(reader_checkpoint, "r") as f:
                 checkpoint_data = json.load(f)
                 
+            # Normalize legacy reader data (sections/author formats) before use
+            from tools.paper_content_tools import (
+                _generate_paper_context_text,
+                _normalize_sections_data,
+                _normalize_authors_list,
+            )
+
+            paper_content = checkpoint_data.get("paper_content") or {}
+            # Coerce legacy shapes
+            paper_content["sections"] = _normalize_sections_data(paper_content.get("sections"))
+            paper_content["authors"] = _normalize_authors_list(paper_content.get("authors"))
+            checkpoint_data["paper_content"] = paper_content
+            checkpoint_data["paper_content_text"] = _generate_paper_context_text(paper_content)
+
             context.paper_content = checkpoint_data.get("paper_content")
             context.paper_content_text = checkpoint_data.get("paper_content_text", "")
 
@@ -155,7 +169,6 @@ async def run_extraction(paper_id: str, papers_dir: str = None, verbose: bool = 
             
             # Re-generate text if missing from checkpoint but content exists
             if not context.paper_content_text and context.paper_content:
-                from tools.paper_content_tools import _generate_paper_context_text
                 context.paper_content_text = _generate_paper_context_text(context.paper_content)
                 
             if context.paper_content:
@@ -255,7 +268,7 @@ async def run_extraction(paper_id: str, papers_dir: str = None, verbose: bool = 
         if verbose:
             print("\n--- Phase 2: Orchestrator (Text Analysis) ---")
         await client.run_orchestrator_phase()
-
+    
         # If Critic requested revisions, let orchestrator loop until APPROVE or max_iterations
         # This relies on agent logic to delegate back to Extractor with the critique context.
         safety_counter = 0
@@ -306,7 +319,7 @@ async def run_extraction(paper_id: str, papers_dir: str = None, verbose: bool = 
         if verbose:
             traceback.print_exc()
         return {"error": str(e), "paper_id": paper_id}
-
+    
     # Compile results
     end_time = datetime.now()
     critique_assessment = (context.state.critique or {}).get("overall_assessment")
@@ -344,7 +357,7 @@ async def run_extraction(paper_id: str, papers_dir: str = None, verbose: bool = 
                     "paper_type": paper_type or "",
                 }
             )
-
+    
     results = {
         "paper_id": paper_id,
         "paper_info": {
@@ -369,7 +382,7 @@ async def run_extraction(paper_id: str, papers_dir: str = None, verbose: bool = 
         },
         "log_file": str(log_file)
     }
-
+    
     duration = (end_time - start_time).total_seconds()
 
     if not is_finalized:
@@ -397,9 +410,9 @@ async def run_extraction(paper_id: str, papers_dir: str = None, verbose: bool = 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with open(output_path, "w") as f:
         json.dump(results, f, indent=2, default=str)
-
+    
     logger.info(f"=== COMPLETE: {len(items)} items in {duration:.1f}s ===")
-
+    
     if verbose:
         print(f"\n✓ Complete: {len(items)} items in {duration:.1f}s")
         print(f"Output: {output_path}")
