@@ -10,11 +10,11 @@ and downstream agents (Planner, Extractor, Critic) work from the extracted text.
 
 import asyncio
 import sys
-import os
 import json
 import shutil
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 # Add project root to path
 PROJECT_ROOT = Path(__file__).parent.parent
@@ -30,11 +30,52 @@ from hooks.safety_hooks import set_ground_truth_access
 from client import CivicExtractionClient
 
 
+def _normalize_authors(value):
+    if value is None:
+        return None
+    if isinstance(value, list):
+        cleaned = [str(v).strip() for v in value if str(v).strip()]
+        value = ", ".join(cleaned)
+    else:
+        value = str(value).strip()
+    if not value or value.lower() == "unknown":
+        return None
+    return value
+
+
+def _normalize_year(value):
+    if value is None:
+        return None
+    if isinstance(value, (int, float)):
+        value = str(int(value))
+    else:
+        value = str(value).strip()
+    if not value or value.lower() == "unknown":
+        return None
+    return value
+
+
+def _sync_reader_metadata(context: CIViCContext, reader_metadata: dict[str, Any] | None) -> tuple[str | None, str | None]:
+    """Merge reader-supplied metadata into the context paper and return normalized values."""
+
+    reader_metadata = reader_metadata or {}
+    reader_author = _normalize_authors(reader_metadata.get("authors"))
+    reader_year = _normalize_year(reader_metadata.get("year"))
+
+    if context.paper:
+        if reader_author:
+            context.paper.author = reader_author
+        if reader_year:
+            context.paper.year = reader_year
+
+    return reader_author, reader_year
+
+
 async def run_extraction(paper_id: str, papers_dir: str = None, verbose: bool = True) -> dict:
     """Run extraction with Reader-first architecture."""
-    
+
     start_time = datetime.now()
-    
+
     if papers_dir is None:
         papers_dir = PAPERS_DIR
     
@@ -120,16 +161,7 @@ async def run_extraction(paper_id: str, papers_dir: str = None, verbose: bool = 
             context.paper_content_text = checkpoint_data.get("paper_content_text", "")
 
             # Sync basic metadata from Reader into PaperInfo (author/year) when loading checkpoint
-            pc = context.paper_content or {}
-            if context.paper:
-                if pc.get("authors"):
-                    # authors may be list or string
-                    if isinstance(pc["authors"], list):
-                        context.paper.author = ", ".join(pc["authors"])
-                    else:
-                        context.paper.author = str(pc["authors"])
-                if pc.get("year"):
-                    context.paper.year = str(pc["year"])
+            _sync_reader_metadata(context, context.paper_content)
             
             # Re-generate text if missing from checkpoint but content exists
             if not context.paper_content_text and context.paper_content:
@@ -191,15 +223,7 @@ async def run_extraction(paper_id: str, papers_dir: str = None, verbose: bool = 
                 raise RuntimeError("Reader agent failed to save paper content.")
 
             # Sync basic metadata from Reader into PaperInfo (author/year)
-            pc = context.paper_content or {}
-            if context.paper:
-                if pc.get("authors"):
-                    if isinstance(pc["authors"], list):
-                        context.paper.author = ", ".join(pc["authors"])
-                    else:
-                        context.paper.author = str(pc["authors"])
-                if pc.get("year"):
-                    context.paper.year = str(pc["year"])
+            _sync_reader_metadata(context, context.paper_content)
                 
             if verbose:
                 stats = context.paper_content.get('statistics', [])
@@ -262,13 +286,44 @@ async def run_extraction(paper_id: str, papers_dir: str = None, verbose: bool = 
     end_time = datetime.now()
     items = context.state.final_extractions if context.state.is_complete else context.state.draft_extractions
     
+    reader_metadata = getattr(context, "paper_content", {}) or {}
+    reader_author, reader_year = _sync_reader_metadata(context, reader_metadata)
+
+    paper_author = _normalize_authors(context.paper.author if context.paper else None)
+    paper_year = _normalize_year(context.paper.year if context.paper else None)
+
+    author_value = reader_author or paper_author or "Unknown"
+    year_value = reader_year or paper_year or "Unknown"
+
+    if context.paper:
+        context.paper.author = author_value
+        context.paper.year = year_value
+
+    paper_type = (
+        context.state.extraction_plan.paper_type if context.state.extraction_plan else None
+    ) or (context.paper_content.get("paper_type") if context.paper_content else None)
+
+    # Keep state.paper_info aligned with the latest metadata
+    if context.state:
+        if context.paper:
+            context.state.paper_info = context.paper
+        if isinstance(context.state.paper_info, dict):
+            context.state.paper_info.update(
+                {
+                    "author": author_value,
+                    "year": year_value,
+                    "num_pages": context.paper.num_pages if context.paper else 0,
+                    "paper_type": paper_type or "",
+                }
+            )
+
     results = {
         "paper_id": paper_id,
         "paper_info": {
-            "author": context.paper.author,
-            "year": context.paper.year,
+            "author": author_value,
+            "year": year_value,
             "num_pages": context.paper.num_pages,
-            "paper_type": context.state.extraction_plan.paper_type if context.state.extraction_plan else None
+            "paper_type": paper_type,
         },
         "extraction": {
             "items": len(items),
