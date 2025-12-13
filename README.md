@@ -161,8 +161,16 @@ Results are saved to `civic_extraction/outputs/{paper_id}_extraction.json`.
 
 ## 🧠 Learnings & Fixes (Recent Workflow)
 
+*   **Context Loss Fix (Critical):** Fixed a bug where the Reader's `sections` field (full paper text) was sometimes stored as a raw string instead of a structured list. The `_normalize_sections_data()` function now ensures sections are always in the correct format, preventing the Extractor from receiving only abstract content. This fix is applied both when saving new Reader output and when loading from checkpoints.
+
 *   **Content Filter Mitigation:** The Reader agent now uses a "Succinct Acknowledgment" strategy ("Received Part X") during image injection. This prevents the LLM from generating long summaries that might inadvertently trigger safety filters before the final extraction step.
+
 *   **Agentic Normalization:** We moved from a "batch tool" to a dedicated **Normalizer Agent**. This allows the LLM to "think" about failed lookups (e.g., trying "Vemurafenib" if "Zelboraf" fails) and retry, significantly improving ID coverage.
+
 *   **Schema Hardening:** The `EvidenceItem` schema was updated to explicitly support normalized fields (`gene_id`, `disease_id`, `therapy_ids`) and their aliases, ensuring data isn't silently stripped during validation.
-*   **Checkpointing:** Essential for cost management. Checkpoints (`01`...`04`) allow restarting from any phase without re-spending tokens on previous steps.
+
+*   **Checkpointing:** Essential for cost management. Checkpoints (`01`...`04`) allow restarting from any phase without re-spending tokens on previous steps. The system automatically normalizes legacy checkpoint formats to ensure compatibility.
+
 *   **SDK pinning:** The public `claude-agent-sdk` tops out at `0.1.14` (no 1.x on PyPI). We pin to that version in `pyproject.toml` to match the runtime.
+
+*   **Python 3.11 Requirement:** The system requires Python 3.11+ due to SDK dependencies. Always use `python3.11` explicitly when running scripts.
