@@ -51,8 +51,7 @@
         "stop_position": null,
         "reference_build": null,
         "clinical_trial_nct_ids": [
-          "NCT03110562",
-          "NCT01986348"
+          "NCT03110562"
         ],
         "cancer_cell_fraction": null,
         "cohort_size": 100,
@@ -103,14 +102,6 @@
             "phases": [
               "PHASE3"
             ]
-          },
-          {
-            "nct_id": "NCT01986348",
-            "title": "Study Evaluating the Efficacy and Safety of Selinexor (KPT-330) in Participants With Recurrent Gliomas",
-            "status": "TERMINATED",
-            "phases": [
-              "PHASE2"
-            ]
           }
         ]
       },
@@ -145,7 +136,6 @@
         "stop_position": null,
         "reference_build": null,
         "clinical_trial_nct_ids": [
-          "NCT03110562",
           "NCT01986348"
         ],
         "cancer_cell_fraction": null,
@@ -191,14 +181,6 @@
         },
         "clinical_trial_details": [
           {
-            "nct_id": "NCT03110562",
-            "title": "Bortezomib, Selinexor, and Dexamethasone in Patients With Multiple Myeloma",
-            "status": "COMPLETED",
-            "phases": [
-              "PHASE3"
-            ]
-          },
-          {
             "nct_id": "NCT01986348",
             "title": "Study Evaluating the Efficacy and Safety of Selinexor (KPT-330) in Participants With Recurrent Gliomas",
             "status": "TERMINATED",
@@ -237,8 +219,7 @@
         "stop_position": null,
         "reference_build": null,
         "clinical_trial_nct_ids": [
-          "NCT03110562",
-          "NCT01986348"
+          "NCT03110562"
         ],
         "cancer_cell_fraction": null,
         "cohort_size": 100,
@@ -287,14 +268,6 @@
             "phases": [
               "PHASE3"
             ]
-          },
-          {
-            "nct_id": "NCT01986348",
-            "title": "Study Evaluating the Efficacy and Safety of Selinexor (KPT-330) in Participants With Recurrent Gliomas",
-            "status": "TERMINATED",
-            "phases": [
-              "PHASE2"
-            ]
           }
         ]
       },
@@ -327,8 +300,7 @@
         "stop_position": null,
         "reference_build": null,
         "clinical_trial_nct_ids": [
-          "NCT03110562",
-          "NCT01986348"
+          "NCT03110562"
         ],
         "cancer_cell_fraction": null,
         "cohort_size": 100,
@@ -377,14 +349,6 @@
             "phases": [
               "PHASE3"
             ]
-          },
-          {
-            "nct_id": "NCT01986348",
-            "title": "Study Evaluating the Efficacy and Safety of Selinexor (KPT-330) in Participants With Recurrent Gliomas",
-            "status": "TERMINATED",
-            "phases": [
-              "PHASE2"
-            ]
           }
         ]
       },
@@ -417,8 +381,7 @@
         "stop_position": null,
         "reference_build": null,
         "clinical_trial_nct_ids": [
-          "NCT03110562",
-          "NCT01986348"
+          "NCT03110562"
         ],
         "cancer_cell_fraction": null,
         "cohort_size": 100,
@@ -466,14 +429,6 @@
             "status": "COMPLETED",
             "phases": [
               "PHASE3"
-            ]
-          },
-          {
-            "nct_id": "NCT01986348",
-            "title": "Study Evaluating the Efficacy and Safety of Selinexor (KPT-330) in Participants With Recurrent Gliomas",
-            "status": "TERMINATED",
-            "phases": [
-              "PHASE2"
             ]
           }
         ]

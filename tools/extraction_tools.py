@@ -11,12 +11,69 @@ import re
 from datetime import datetime
 from pathlib import Path
 from claude_agent_sdk import tool
-from typing import Any
+from typing import Any, Optional, Union
 
 from context import require_context
 from context.state import ExtractionPlan
 from schemas import REQUIRED_FIELDS
 from config import OUTPUTS_DIR
+
+
+def _normalize_disease_terms(name: Optional[str]) -> list:
+    """Return a list of lowercased disease strings for substring matching.
+
+    We preserve both the full string and simple splits on common separators so
+    trials with slightly different phrasing can still match.
+    """
+    if not name:
+        return []
+    lowered = name.lower()
+    cleaned = re.sub(r"[^a-z0-9\s/-]", " ", lowered)
+    segments = [seg.strip() for seg in re.split(r"[,/;]+", cleaned) if seg.strip()]
+    if cleaned.strip() and cleaned.strip() not in segments:
+        segments.append(cleaned.strip())
+    return segments
+
+
+def _parse_trial_entries(meta_trials: Optional[Union[str, list]], candidate_diseases: set) -> tuple[list, list]:
+    """Parse trial metadata into structured entries.
+
+    Each entry includes the NCT IDs, the lowercased source text, and any disease
+    tokens found in that text that overlap with known evidence diseases. This
+    helps avoid attaching trials from unrelated diseases (e.g., glioblastoma
+    trials to myeloma evidence items).
+    """
+
+    lines: list[str] = []
+    if isinstance(meta_trials, str):
+        lines = [line.strip() for line in meta_trials.splitlines() if line.strip()]
+    elif isinstance(meta_trials, list):
+        lines = [str(line).strip() for line in meta_trials if str(line).strip()]
+
+    trial_entries = []
+    for line in lines:
+        ncts = re.findall(r"NCT\d+", line)
+        if not ncts:
+            continue
+        lower_line = line.lower()
+        diseases_in_line = [d for d in candidate_diseases if d in lower_line]
+        seen = set()
+        deduped_ncts = [n for n in ncts if not (n in seen or seen.add(n))]
+        trial_entries.append({
+            "ncts": deduped_ncts,
+            "text": lower_line,
+            "diseases": diseases_in_line,
+        })
+
+    flat_ncts_seen = set()
+    flat_ncts = []
+    for entry in trial_entries:
+        for nct in entry["ncts"]:
+            if nct not in flat_ncts_seen:
+                flat_ncts.append(nct)
+                flat_ncts_seen.add(nct)
+
+    return trial_entries, flat_ncts
 
 def _dump_checkpoint(filename: str, extra_data: dict = None):
     """Helper to save checkpoint to disk."""
@@ -203,19 +260,20 @@ async def save_evidence_items(args: dict[str, Any]) -> dict[str, Any]:
     ctx_meta = getattr(ctx, "paper_content", {}) or {}
     if not isinstance(ctx_meta, dict):
         ctx_meta = {}
-    meta_title = ctx_meta.get("title")
+    meta_title = ctx_meta.get("title") or ""
     meta_journal = ctx_meta.get("journal")
     meta_year = ctx_meta.get("year")
     meta_trials = ctx_meta.get("clinical_trials") or ctx_meta.get("clinical_trial_nct_ids")
-    trials_list = []
-    if meta_trials:
-        if isinstance(meta_trials, str):
-            trials_list = re.findall(r"NCT\d+", meta_trials)
-        elif isinstance(meta_trials, list):
-            trials_list = [str(t) for t in meta_trials if t]
-    # dedupe preserving order
-    seen = {}
-    trials_list = [seen.setdefault(t, t) for t in trials_list if t not in seen]
+
+    # Build disease-aware trial entries to avoid attaching unrelated trials
+    candidate_diseases = set()
+    for item in items:
+        if isinstance(item, dict):
+            candidate_diseases.update(_normalize_disease_terms(item.get("disease_name")))
+    trial_entries, trials_list = _parse_trial_entries(meta_trials, candidate_diseases)
+
+    # Determine diseases that clearly belong to the primary paper context (e.g., title)
+    primary_diseases = {d for d in candidate_diseases if d and d in meta_title.lower()}
 
     # Backfill per item before validation
     for item in items:
@@ -226,8 +284,41 @@ async def save_evidence_items(args: dict[str, Any]) -> dict[str, Any]:
                 item["source_journal"] = meta_journal
             if meta_year and not item.get("source_publication_year"):
                 item["source_publication_year"] = str(meta_year)
-            if trials_list and not item.get("clinical_trial_nct_ids"):
-                item["clinical_trial_nct_ids"] = trials_list
+
+            # Disease-aware clinical trial assignment
+            if trials_list:
+                disease_terms = _normalize_disease_terms(item.get("disease_name"))
+                existing_trials = item.get("clinical_trial_nct_ids")
+                if isinstance(existing_trials, str):
+                    existing_trials = [existing_trials]
+                elif existing_trials is None:
+                    existing_trials = []
+
+                matched_trials = []
+                for entry in trial_entries:
+                    if entry["diseases"]:
+                        if any(term in entry["diseases"] for term in disease_terms):
+                            matched_trials.extend(entry["ncts"])
+                    elif primary_diseases and any(term in primary_diseases for term in disease_terms):
+                        matched_trials.extend(entry["ncts"])
+
+                # dedupe preserving order
+                seen_trials = set()
+                matched_trials = [t for t in matched_trials if not (t in seen_trials or seen_trials.add(t))]
+
+                if matched_trials:
+                    item["clinical_trial_nct_ids"] = matched_trials
+                elif existing_trials:
+                    item["clinical_trial_nct_ids"] = existing_trials
+                # Align clinical_trial_details with filtered NCT IDs, if present
+                if item.get("clinical_trial_nct_ids") and item.get("clinical_trial_details"):
+                    nct_set = set(item["clinical_trial_nct_ids"])
+                    filtered_details = [d for d in item["clinical_trial_details"] if d.get("nct_id") in nct_set]
+                    if filtered_details:
+                        item["clinical_trial_details"] = filtered_details
+                    else:
+                        item.pop("clinical_trial_details", None)
+
             # Default variant_origin to SOMATIC unless predisposition
             if not item.get("variant_origin") and item.get("evidence_type") != "PREDISPOSING":
                 item["variant_origin"] = "SOMATIC"
