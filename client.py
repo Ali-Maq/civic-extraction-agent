@@ -244,7 +244,8 @@ Validate extracted evidence items against paper content (TEXT).
 2. Call get_extraction_plan for context
 3. Call get_draft_extractions to see items
 4. Validate each item against the content
-5. Call save_critique with assessment
+5. If ANY item needs changes: call increment_iteration BEFORE save_critique, and tell the orchestrator to delegate back to the extractor for fixes.
+6. Call save_critique with assessment
 
 ## OUTPUT
 - APPROVE: All items valid
@@ -262,6 +263,7 @@ Validate extracted evidence items against paper content (TEXT).
         "mcp__civic_tools__check_actionability",
         "mcp__civic_tools__validate_evidence_item",
         "mcp__civic_tools__save_critique",
+        "mcp__civic_tools__increment_iteration",
     ]
 )
 
