@@ -335,7 +335,7 @@ async def lookup_variant_info_async(gene_symbol: str, variant_name: str) -> Dict
         result = await annotate(gene_symbol, variant_name)
 
         if result.get("found"):
-            return {
+            response = {
                 "found": True,
                 # Genomic coordinates
                 "chromosome": result.get("chromosome"),
@@ -347,15 +347,28 @@ async def lookup_variant_info_async(gene_symbol: str, variant_name: str) -> Dict
                 "representative_transcript": result.get("representative_transcript"),
                 # Identifiers
                 "variant_clinvar_ids": result.get("clinvar_id"),
+                "variant_cosmic_ids": result.get("cosmic_id"),
                 "variant_rsid": result.get("rsid"),
                 # HGVS descriptions
                 "variant_hgvs_coding": result.get("hgvs_c"),
+                "variant_hgvs_c": result.get("hgvs_c"),
                 "variant_hgvs_protein": result.get("hgvs_p"),
+                "variant_hgvs_p": result.get("hgvs_p"),
                 "variant_hgvs_genomic": result.get("hgvs_g"),
                 # Gene info
+                "gene": result.get("gene"),
+                "variant": result.get("variant"),
                 "gene_entrez_id": result.get("gene_entrez_id"),
+                # Clinical annotations
+                "clinical_significance": result.get("clinical_significance"),
+                "review_status": result.get("review_status"),
+                # Functional predictions
+                "cadd_score": result.get("cadd_score"),
+                "sift_prediction": result.get("sift_prediction"),
+                "polyphen_prediction": result.get("polyphen_prediction"),
                 "source": "MyVariant.info"
             }
+            return response
         else:
             return {"found": False, "error": result.get("error", "Variant not found")}
 
@@ -391,7 +404,7 @@ def lookup_variant_info(gene_symbol: str, variant_name: str) -> Dict[str, Any]:
         result = annotate(gene_symbol, variant_name)
 
         if result.get("found"):
-            return {
+            response = {
                 "found": True,
                 # Genomic coordinates
                 "chromosome": result.get("chromosome"),
@@ -403,15 +416,28 @@ def lookup_variant_info(gene_symbol: str, variant_name: str) -> Dict[str, Any]:
                 "representative_transcript": result.get("representative_transcript"),
                 # Identifiers
                 "variant_clinvar_ids": result.get("clinvar_id"),
+                "variant_cosmic_ids": result.get("cosmic_id"),
                 "variant_rsid": result.get("rsid"),
-                # HGVS descriptions
-                "variant_hgvs_coding": result.get("hgvs_coding"),
-                "variant_hgvs_protein": result.get("hgvs_protein"),
-                "variant_hgvs_genomic": result.get("hgvs_genomic"),
+                # HGVS descriptions (include both legacy and standard keys)
+                "variant_hgvs_coding": result.get("hgvs_c"),
+                "variant_hgvs_c": result.get("hgvs_c"),
+                "variant_hgvs_protein": result.get("hgvs_p"),
+                "variant_hgvs_p": result.get("hgvs_p"),
+                "variant_hgvs_genomic": result.get("hgvs_g"),
                 # Gene info
+                "gene": result.get("gene"),
+                "variant": result.get("variant"),
                 "gene_entrez_id": result.get("gene_entrez_id"),
+                # Clinical annotations
+                "clinical_significance": result.get("clinical_significance"),
+                "review_status": result.get("review_status"),
+                # Functional predictions
+                "cadd_score": result.get("cadd_score"),
+                "sift_prediction": result.get("sift_prediction"),
+                "polyphen_prediction": result.get("polyphen_prediction"),
                 "source": "MyVariant.info"
             }
+            return response
         else:
             return {"found": False, "error": result.get("error", "Variant not found")}
 

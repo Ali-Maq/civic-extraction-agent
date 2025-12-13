@@ -10,7 +10,7 @@ import re
 import requests
 import aiohttp
 import asyncio
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from typing import Any, Dict, Optional, Tuple, Union
 
 
@@ -495,18 +495,8 @@ def annotate_variant(gene: str, variant: str) -> dict:
     return _annotation_to_dict(result)
 
 def _annotation_to_dict(result: VariantAnnotation) -> dict:
-    return {
-        "found": result.found,
-        "clinvar_id": result.clinvar_id,
-        "chromosome": result.chromosome,
-        "start_position": result.start_position,
-        "stop_position": result.stop_position,
-        "reference_bases": result.reference_bases,
-        "variant_bases": result.variant_bases,
-        "reference_build": result.reference_build,
-        "hgvs_c": result.hgvs_c,
-        "hgvs_p": result.hgvs_p,
-        "rsid": result.rsid,
-        "cadd_score": result.cadd_score,
-        "error": result.error
-    }
+    """Convert a VariantAnnotation object to a dict with all populated attributes."""
+
+    # asdict preserves all dataclass fields, ensuring downstream consumers receive
+    # the full annotation payload (gene, variant identifiers, clinical metrics, etc.).
+    return asdict(result)
