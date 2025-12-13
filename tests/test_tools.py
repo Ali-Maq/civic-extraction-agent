@@ -3,8 +3,9 @@ Tests for MCP Tools
 ===================
 """
 
-import pytest
+import inspect
 import json
+import pytest
 
 
 class TestExtractionTools:
@@ -145,6 +146,52 @@ class TestNormalizationTools:
         # Check normalization metadata was added
         assert "_normalization" in normalized
         assert normalized["_normalization"]["normalized"] == True
+
+    def test_variant_annotator_cache_separation(self):
+        """Ensure async and sync annotators use distinct caches and call types."""
+        import tools.normalization_tools as normalization_tools
+        import sys
+        import types
+
+        # Provide stub modules to satisfy lazy imports without touching network.
+        previous_modules = {
+            key: sys.modules.get(key)
+            for key in ("normalization", "normalization.variant_annotator", "civic_extraction.normalization.variant_annotator")
+        }
+        fake_pkg = types.ModuleType("normalization")
+        fake_pkg.__path__ = []
+        fake_variant_module = types.ModuleType("normalization.variant_annotator")
+
+        async def dummy_async(*args, **kwargs):
+            return {"found": False}
+
+        def dummy_sync(*args, **kwargs):
+            return {"found": False}
+
+        fake_variant_module.annotate_variant_async = dummy_async
+        fake_variant_module.annotate_variant = dummy_sync
+
+        sys.modules["normalization"] = fake_pkg
+        sys.modules["normalization.variant_annotator"] = fake_variant_module
+        sys.modules["civic_extraction.normalization.variant_annotator"] = fake_variant_module
+
+        normalization_tools._variant_annotator_async = None
+        normalization_tools._variant_annotator_sync = None
+
+        async_annotator = normalization_tools.get_variant_annotator_async()
+        sync_annotator = normalization_tools.get_variant_annotator()
+
+        assert inspect.iscoroutinefunction(async_annotator)
+        assert not inspect.iscoroutinefunction(sync_annotator)
+        assert async_annotator is normalization_tools._variant_annotator_async
+        assert sync_annotator is normalization_tools._variant_annotator_sync
+
+        # Restore previous module state
+        for key, module in previous_modules.items():
+            if module is None:
+                sys.modules.pop(key, None)
+            else:
+                sys.modules[key] = module
 
 
 class TestContextManagement:
