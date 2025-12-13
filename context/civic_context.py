@@ -111,9 +111,11 @@ class CIViCContext:
             page_images=page_images,
             pdf_path=pdf_file if pdf_file and pdf_file.exists() else None
         )
-        
+
         # Reset state for new paper
         self.state.reset()
+        # Keep state paper_info in sync with the loaded paper metadata
+        self.state.paper_info = self.paper
     
     def get_page_image_path(self, page_num: int) -> Optional[Path]:
         """Get the path to a specific page image."""
