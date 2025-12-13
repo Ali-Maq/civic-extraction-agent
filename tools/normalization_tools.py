@@ -51,30 +51,31 @@ from context import require_context
 from config import OUTPUTS_DIR
 
 # Lazy imports to avoid circular dependencies
-_variant_annotator = None
+_variant_annotator_async = None
+_variant_annotator_sync = None
 
 
 def get_variant_annotator_async():
     """Lazy load the async variant annotator."""
-    global _variant_annotator
-    if _variant_annotator is None:
+    global _variant_annotator_async
+    if _variant_annotator_async is None:
         try:
             from normalization.variant_annotator import annotate_variant_async
         except ImportError:
             from civic_extraction.normalization.variant_annotator import annotate_variant_async
-        _variant_annotator = annotate_variant_async
-    return _variant_annotator
+        _variant_annotator_async = annotate_variant_async
+    return _variant_annotator_async
 
 def get_variant_annotator():
     """Lazy load the variant annotator."""
-    global _variant_annotator
-    if _variant_annotator is None:
+    global _variant_annotator_sync
+    if _variant_annotator_sync is None:
         try:
             from normalization.variant_annotator import annotate_variant
         except ImportError:
             from civic_extraction.normalization.variant_annotator import annotate_variant
-        _variant_annotator = annotate_variant
-    return _variant_annotator
+        _variant_annotator_sync = annotate_variant
+    return _variant_annotator_sync
 
 
 def _dump_checkpoint(filename: str, extra_data: dict = None):
