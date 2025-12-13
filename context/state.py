@@ -116,18 +116,18 @@ class ExtractionState:
         self.paper_content = paper_content
         # Handle dict vs object
         if isinstance(paper_content, dict):
-             # We need a helper to generate text from dict if it's not the object
-             # But paper_content_tools saves it as dict.
-             # And paper_content_tools already sets ctx.paper_content_text!
-             # So this method might be redundant if tools do it directly.
-             pass
+            # We need a helper to generate text from dict if it's not the object
+            # But paper_content_tools saves it as dict.
+            # And paper_content_tools already sets ctx.paper_content_text!
+            # So this method might be redundant if tools do it directly.
+            pass
         else:
-        self.paper_context_text = paper_content.to_context_document()
-        
+            self.paper_context_text = paper_content.to_context_document()
+
         # Also update paper_info with extracted metadata
-        if self.paper_info:
+        if self.paper_info and hasattr(paper_content, "paper_type"):
             self.paper_info.paper_type = paper_content.paper_type
-    
+
     def get_context_for_agents(self) -> str:
         """
         Get the text context to pass to Planner/Extractor/Critic.
@@ -161,13 +161,22 @@ class ExtractionState:
     
     def to_summary(self) -> dict:
         """Generate summary for logging/output."""
+        info = self.paper_info
+
+        def _get_info(field: str, default: Any):
+            if isinstance(info, dict):
+                return info.get(field, default)
+            if info is not None:
+                return getattr(info, field, default)
+            return default
+
         return {
-            "paper_id": self.paper_info.paper_id if self.paper_info else "Unknown",
+            "paper_id": _get_info("paper_id", "Unknown"),
             "paper_info": {
-                "author": self.paper_info.author if self.paper_info else "Unknown",
-                "year": self.paper_info.year if self.paper_info else "Unknown",
-                "num_pages": self.paper_info.num_pages if self.paper_info else 0,
-                "paper_type": self.paper_info.paper_type if self.paper_info else ""
+                "author": _get_info("author", "Unknown"),
+                "year": _get_info("year", "Unknown"),
+                "num_pages": _get_info("num_pages", 0),
+                "paper_type": _get_info("paper_type", ""),
             },
             "extraction": {
                 "items": len(self.final_extractions) if self.is_complete else len(self.draft_extractions),
