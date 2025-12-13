@@ -111,6 +111,8 @@ Run the pipeline on a specific paper (PDF or folder). The system supports **Smar
 python civic_extraction/scripts/run_extraction.py /path/to/paper.pdf
 ```
 
+**Paper ID derivation & checkpoints:** When you pass a PDF path, `run_extraction.py` derives `paper_id` from the PDF filename. If the PDF sits in a shared folder, the script will create/use a subfolder named after the PDF stem to avoid checkpoint collisions. Each run writes per-paper checkpoints under `outputs/checkpoints/<paper_id>/01-04_*.json` and the final result to `outputs/<paper_id>_extraction.json`.
+
 ### Outputs
 Results are saved to `civic_extraction/outputs/{paper_id}_extraction.json`.
 
@@ -122,3 +124,4 @@ Results are saved to `civic_extraction/outputs/{paper_id}_extraction.json`.
 *   **Agentic Normalization:** We moved from a "batch tool" to a dedicated **Normalizer Agent**. This allows the LLM to "think" about failed lookups (e.g., trying "Vemurafenib" if "Zelboraf" fails) and retry, significantly improving ID coverage.
 *   **Schema Hardening:** The `EvidenceItem` schema was updated to explicitly support normalized fields (`gene_id`, `disease_id`, `therapy_ids`) and their aliases, ensuring data isn't silently stripped during validation.
 *   **Checkpointing:** Essential for cost management. Checkpoints (`01`...`04`) allow restarting from any phase without re-spending tokens on previous steps.
+*   **SDK pinning:** The public `claude-agent-sdk` tops out at `0.1.14` (no 1.x on PyPI). We pin to that version in `pyproject.toml` to match the runtime.

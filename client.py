@@ -30,6 +30,7 @@ from tool_registry import (
     READER_TOOLS,
     ORCHESTRATOR_AND_SUBAGENT_TOOLS,
 )
+from tools.session_logger import log_event
 
 # =============================================================================
 # AGENT DEFINITIONS
@@ -123,6 +124,7 @@ Your goal is to standardize extracted evidence items to standard ontologies.
      - **Analyze**: Check for typos (e.g. "Mellanoma"), extra words, or synonyms.
      - **RETRY**: Call the tool again with the corrected term.
      - Only give up after retrying.
+   - If still not found, set the field to null but keep the key so all items share the same structure.
 
 4. **Save**: Call `save_evidence_items` with the updated list.
 5. **Finish**: Call `finalize_extraction`.
@@ -176,21 +178,27 @@ EXTRACTOR_AGENT = AgentDefinition(
 ## YOUR ROLE
 Extract actionable clinical evidence from paper content (TEXT).
 
-## REQUIRED FIELDS (ALL 8 MANDATORY)
-1. feature_names: Gene name
-2. variant_names: Specific variant
-3. disease_name: Disease type
-4. evidence_type: PREDICTIVE/PROGNOSTIC/DIAGNOSTIC/PREDISPOSING
-5. evidence_level: A/B/C/D/E
-6. evidence_direction: SUPPORTS/DOES_NOT_SUPPORT
-7. evidence_significance: Based on type
-8. evidence_description: With statistics
+## REQUIRED CORE FIELDS (ALL MANDATORY)
+- feature_names (gene), variant_names, disease_name
+- evidence_type, evidence_level, evidence_direction, evidence_significance
+- evidence_description (1-3 sentences with stats)
 
-## REASONING FIELDS (MANDATORY)
-- source_page_numbers: e.g. "Page 3, Table 1"
-- verbatim_quote: The exact sentence supporting the claim
-- extraction_confidence: 0.0 to 1.0
-- extraction_reasoning: Explain WHY this evidence is actionable
+## REQUIRED CONTEXT FIELDS
+- source_page_numbers (e.g., "Page 3, Table 1")
+- verbatim_quote (exact sentence)
+- extraction_confidence (0.0–1.0)
+- extraction_reasoning (why actionable)
+
+## EXTENDED FIELDS (FILL WHEN PRESENT IN TEXT OR READER)
+- variant_origin (SOMATIC/GERMLINE/RARE_GERMLINE/NA/COMBINED)
+- variant_hgvs_descriptions AND/OR explicit variant_hgvs_c, variant_hgvs_p
+- genomic coordinates: chromosome, start_position, stop_position, reference_build (GRCh37/38)
+- clinical_trial_nct_ids (carry NCTs from Reader clinical_trials when relevant)
+- cancer_cell_fraction (as decimal, e.g., 0.35)
+- cohort_size (integer if stated)
+- source_title, source_publication_year, source_journal (reuse Reader metadata)
+- therapy_names mapped to trials when obvious (keep as text; do not invent)
+- IMPORTANT: Every evidence item must emit the SAME set of fields. If a field is unavailable, set it to null (do NOT omit). Lists must stay lists (["value"], not "value").
 
 ## WORKFLOW
 1. Call get_paper_content to get the text
@@ -200,8 +208,10 @@ Extract actionable clinical evidence from paper content (TEXT).
 5. Call save_evidence_items with all items
 
 ## CRITICAL
-- Work from get_paper_content text only
+- Work ONLY from get_paper_content text (Reader output) and its metadata
+- Reuse available metadata instead of inventing (title, journal, year, NCT IDs)
 - Include verbatim quotes from the text
+- Prefer structured values (HGVS, coords, NCT IDs) when present; otherwise leave blank
 """,
     tools=[
         "mcp__civic_tools__get_paper_info",
@@ -223,10 +233,11 @@ CRITIC_AGENT = AgentDefinition(
 Validate extracted evidence items against paper content (TEXT).
 
 ## VALIDATION CHECKLIST
-1. All 8 required fields present
+1. All required fields present
 2. Type-specific rules (PREDICTIVE needs therapy_names)
-3. Statistics match the paper content
-4. Verbatim quotes appear in content
+3. Extended fields (HGVS c/p, coordinates, variant_origin, clinical_trial_nct_ids, cohort_size, cancer_cell_fraction) are kept when supported by text or Reader metadata; do not drop them.
+4. Statistics match the paper content
+5. Verbatim quotes appear in content
 
 ## WORKFLOW
 1. Call get_paper_content to get the text
@@ -267,9 +278,18 @@ class CivicExtractionClient:
         """Create ClaudeAgentOptions based on the phase."""
 
         hook_config = {
-            "PreToolUse": [HookMatcher(hooks=[logging_hooks.log_tool_usage])],
-            "PostToolUse": [HookMatcher(hooks=[logging_hooks.log_tool_result])],
-            "SubagentStop": [HookMatcher(hooks=[logging_hooks.log_subagent_stop])],
+            "PreToolUse": [
+                HookMatcher(hooks=[logging_hooks.log_tool_usage]),
+                HookMatcher(hooks=[self._log_session_event]),
+            ],
+            "PostToolUse": [
+                HookMatcher(hooks=[logging_hooks.log_tool_result]),
+                HookMatcher(hooks=[self._log_session_event]),
+            ],
+            "SubagentStop": [
+                HookMatcher(hooks=[logging_hooks.log_subagent_stop]),
+                HookMatcher(hooks=[self._log_session_event]),
+            ],
         }
         
         if phase == "reader":
@@ -316,6 +336,25 @@ class CivicExtractionClient:
         
         logger.info(f"[TOOL] {tool_name} | {summary}")
         return {"behavior": "allow", "updatedInput": input_data}
+
+    async def _log_session_event(self, input_data: dict[str, Any], tool_use_id: str | None, hook_ctx) -> dict[str, Any]:
+        """
+        Hook to write structured events to per-paper session log.
+        """
+        try:
+            ctx = get_current_context()
+            paper_id = ctx.paper.paper_id if ctx and ctx.paper else "unknown"
+            event = {
+                "event": "hook",
+                "hook": hook_ctx.__class__.__name__ if hook_ctx else "unknown",
+                "tool": input_data.get("tool_name") or input_data.get("name"),
+                "input_keys": list(input_data.keys()),
+                "tool_use_id": tool_use_id,
+            }
+            log_event(paper_id, event)
+        except Exception:
+            pass
+        return {}
 
     def _load_images_from_pdf(self, pdf_path: str) -> List[Dict[str, Any]]:
         """

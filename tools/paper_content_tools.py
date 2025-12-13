@@ -82,6 +82,18 @@ async def save_paper_content(args: Dict[str, Any]) -> Dict[str, Any]:
         "clinical_trials": clinical_trials,
     }
     
+    # Sync basic metadata into PaperInfo so final outputs aren't "Unknown"
+    if context.paper:
+        if authors:
+            if isinstance(authors, list):
+                context.paper.author = ", ".join(authors)
+            else:
+                context.paper.author = str(authors)
+        if year:
+            context.paper.year = str(year)
+        if paper_type:
+            context.paper.paper_type = paper_type
+    
     # Generate text context for other agents
     context.paper_content_text = _generate_paper_context_text(context.paper_content)
     

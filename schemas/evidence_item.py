@@ -146,6 +146,18 @@ class EvidenceItem(BaseModel):
         None,
         description="HGVS notation if provided: p.V600E, c.1799T>A"
     )
+    variant_hgvs_c: Optional[str] = Field(
+        None,
+        description="Explicit HGVS c. notation (e.g., c.80G>C)"
+    )
+    variant_hgvs_p: Optional[str] = Field(
+        None,
+        description="Explicit HGVS p. notation (e.g., p.Arg27Pro)"
+    )
+    variant_coordinates: Optional[str] = Field(
+        None,
+        description="Genomic interval if stated (e.g., chr16:11965404 or chr12:13002001-13358000)"
+    )
     
     molecular_profile_name: Optional[str] = Field(
         None,
@@ -239,6 +251,20 @@ class EvidenceItem(BaseModel):
     clinical_trial_names: Optional[str] = Field(
         None,
         description="Trial acronym: 'BRIM-3', 'KEYNOTE-024'"
+    )
+
+    # =========================================================================
+    # STUDY/COHORT FIELDS
+    # =========================================================================
+
+    cohort_size: Optional[int] = Field(
+        None,
+        description="Number of patients in the cohort relevant to the evidence item"
+    )
+
+    cancer_cell_fraction: Optional[float] = Field(
+        None,
+        description="Cancer cell fraction (0-1) if reported (e.g., 0.35)"
     )
     
     # =========================================================================
