@@ -7,6 +7,7 @@ MCP tools for managing extraction state (plans, items, critiques).
 
 import json
 import os
+import re
 from datetime import datetime
 from pathlib import Path
 from claude_agent_sdk import tool
@@ -198,6 +199,39 @@ async def save_evidence_items(args: dict[str, Any]) -> dict[str, Any]:
         else:
             print("DEBUG: Item 0 MISSING gene_entrez_ids")
 
+    # Optional backfill from Reader metadata (title, journal, NCTs)
+    ctx_meta = getattr(ctx, "paper_content", {}) or {}
+    if not isinstance(ctx_meta, dict):
+        ctx_meta = {}
+    meta_title = ctx_meta.get("title")
+    meta_journal = ctx_meta.get("journal")
+    meta_year = ctx_meta.get("year")
+    meta_trials = ctx_meta.get("clinical_trials") or ctx_meta.get("clinical_trial_nct_ids")
+    trials_list = []
+    if meta_trials:
+        if isinstance(meta_trials, str):
+            trials_list = re.findall(r"NCT\d+", meta_trials)
+        elif isinstance(meta_trials, list):
+            trials_list = [str(t) for t in meta_trials if t]
+    # dedupe preserving order
+    seen = {}
+    trials_list = [seen.setdefault(t, t) for t in trials_list if t not in seen]
+
+    # Backfill per item before validation
+    for item in items:
+        if isinstance(item, dict):
+            if meta_title and not item.get("source_title"):
+                item["source_title"] = meta_title
+            if meta_journal and not item.get("source_journal"):
+                item["source_journal"] = meta_journal
+            if meta_year and not item.get("source_publication_year"):
+                item["source_publication_year"] = str(meta_year)
+            if trials_list and not item.get("clinical_trial_nct_ids"):
+                item["clinical_trial_nct_ids"] = trials_list
+            # Default variant_origin to SOMATIC unless predisposition
+            if not item.get("variant_origin") and item.get("evidence_type") != "PREDISPOSING":
+                item["variant_origin"] = "SOMATIC"
+
     # Validate each item
     validation_summary = []
     for i, item in enumerate(items):
@@ -323,6 +357,9 @@ async def save_critique(args: dict[str, Any]) -> dict[str, Any]:
     
     # Save to context
     ctx.state.critique = critique
+    
+    # SAVE CHECKPOINT (Critic)
+    _dump_checkpoint("03_critic_output.json", {"critique": critique})
     
     # Determine recommendation
     needs_revision = assessment == "NEEDS_REVISION"

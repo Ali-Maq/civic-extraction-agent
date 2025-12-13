@@ -12,6 +12,7 @@ import asyncio
 import sys
 import os
 import json
+import shutil
 from datetime import datetime
 from pathlib import Path
 
@@ -40,22 +41,23 @@ async def run_extraction(paper_id: str, papers_dir: str = None, verbose: bool = 
     # Handle full path vs paper_id
     input_path = Path(paper_id)
     if input_path.is_file() and input_path.suffix.lower() == '.pdf':
-        # User passed a PDF file directly
-        # We need to set papers_dir to the parent of this file's folder, 
-        # and paper_id to the folder name (assuming CIViC structure: folder/file.pdf)
-        # OR if the file is just loose, we treat its parent as papers_dir.
-        
-        # However, context.load_paper expects paper_id to be a folder name inside papers_dir.
-        # So if we have /a/b/paper/paper.pdf
-        # papers_dir = /a/b
-        # paper_id = paper
-        
-        # If the PDF name doesn't match folder name, context.load_paper might fail finding the PDF 
-        # unless we adjust it. But usually CIViC structure is strict.
-        # Let's assume input is /path/to/PAPER_ID/PAPER_ID.pdf
-        
-        paper_id = input_path.parent.name
-        papers_dir = input_path.parent.parent
+        # User passed a PDF file directly.
+        pdf_parent = input_path.parent
+        pdf_stem = input_path.stem
+
+        if pdf_parent.name == pdf_stem:
+            # Already in a dedicated folder named after the paper_id.
+            paper_id = pdf_parent.name
+            papers_dir = pdf_parent.parent
+        else:
+            # Shared folder: create/use a dedicated subfolder to avoid checkpoint collisions.
+            paper_id = pdf_stem
+            target_folder = pdf_parent / paper_id
+            target_folder.mkdir(parents=True, exist_ok=True)
+            target_pdf = target_folder / input_path.name
+            if not target_pdf.exists():
+                shutil.copy2(input_path, target_pdf)
+            papers_dir = pdf_parent
     elif input_path.is_dir():
         paper_id = input_path.name
         papers_dir = input_path.parent
@@ -116,6 +118,18 @@ async def run_extraction(paper_id: str, papers_dir: str = None, verbose: bool = 
                 
             context.paper_content = checkpoint_data.get("paper_content")
             context.paper_content_text = checkpoint_data.get("paper_content_text", "")
+
+            # Sync basic metadata from Reader into PaperInfo (author/year) when loading checkpoint
+            pc = context.paper_content or {}
+            if context.paper:
+                if pc.get("authors"):
+                    # authors may be list or string
+                    if isinstance(pc["authors"], list):
+                        context.paper.author = ", ".join(pc["authors"])
+                    else:
+                        context.paper.author = str(pc["authors"])
+                if pc.get("year"):
+                    context.paper.year = str(pc["year"])
             
             # Re-generate text if missing from checkpoint but content exists
             if not context.paper_content_text and context.paper_content:
@@ -175,6 +189,17 @@ async def run_extraction(paper_id: str, papers_dir: str = None, verbose: bool = 
             # Verify content was extracted
             if not context.paper_content:
                 raise RuntimeError("Reader agent failed to save paper content.")
+
+            # Sync basic metadata from Reader into PaperInfo (author/year)
+            pc = context.paper_content or {}
+            if context.paper:
+                if pc.get("authors"):
+                    if isinstance(pc["authors"], list):
+                        context.paper.author = ", ".join(pc["authors"])
+                    else:
+                        context.paper.author = str(pc["authors"])
+                if pc.get("year"):
+                    context.paper.year = str(pc["year"])
                 
             if verbose:
                 stats = context.paper_content.get('statistics', [])
@@ -208,6 +233,23 @@ async def run_extraction(paper_id: str, papers_dir: str = None, verbose: bool = 
         if verbose:
             print("\n--- Phase 2: Orchestrator (Text Analysis) ---")
         await client.run_orchestrator_phase()
+    
+        # If Critic requested revisions, let orchestrator loop until APPROVE or max_iterations
+        # This relies on agent logic to delegate back to Extractor with the critique context.
+        safety_counter = 0
+        while (
+            not context.state.is_complete
+            and context.state.critique
+            and context.state.critique.get("overall_assessment") == "NEEDS_REVISION"
+            and context.state.iteration_count < context.state.max_iterations
+        ):
+            safety_counter += 1
+            if verbose:
+                print(f"\n--- Orchestrator re-run for revisions (iteration {context.state.iteration_count + 1}) ---")
+            await client.run_orchestrator_phase()
+            # Avoid runaway loops in case agents don't converge
+            if safety_counter > context.state.max_iterations + 1:
+                break
     
     except Exception as e:
         import traceback

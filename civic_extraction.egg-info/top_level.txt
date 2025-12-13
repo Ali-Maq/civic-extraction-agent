@@ -1,9 +1,7 @@
-agents
 config
 context
 hooks
 normalization
-prompts
 schemas
 scripts
 tools

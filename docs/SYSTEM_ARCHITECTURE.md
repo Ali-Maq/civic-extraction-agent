@@ -184,7 +184,7 @@ The system is crash-resistant. `run_extraction.py` checks for JSON files on disk
 *   **Level 3:** `03_extractor_output.json` (Drafts).
 *   **Level 4:** `04_normalization_output.json`.
 
-**Note:** The resume logic is handled in `scripts/run_extraction.py`, which pre-loads the state into `CIViCContext`.
+**Note:** The resume logic is handled in `scripts/run_extraction.py`, which pre-loads the state into `CIViCContext`. When a PDF path is provided, `paper_id` is derived from the PDF filename. If the PDF lives in a shared folder, the script creates/uses a subfolder named after the PDF stem to avoid checkpoint collisions, then writes checkpoints to `outputs/checkpoints/<paper_id>/`.
 
 ### Async & Normalization
 *   Normalization tools (`tools/normalization_tools.py`) use `aiohttp` for concurrent API calls.
@@ -193,3 +193,6 @@ The system is crash-resistant. `run_extraction.py` checks for JSON files on disk
 ### Pydantic & Validation
 *   We use strict Pydantic models in `schemas/` to validate tools inputs/outputs.
 *   Be careful when moving data between Pydantic models and raw Dicts (we handled this in `extraction_tools.py` by converting inputs).
+
+### Dependencies
+*   The public `claude-agent-sdk` currently tops out at `0.1.14` on PyPI. We pin to that version in `pyproject.toml` to match runtime behavior; no 1.x builds are available publicly yet.
