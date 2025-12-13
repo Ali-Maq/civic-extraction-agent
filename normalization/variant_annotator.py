@@ -5,12 +5,16 @@ Variant Annotator
 Specialized variant annotation using MyVariant.info.
 """
 
+import logging
 import re
 import requests
 import aiohttp
 import asyncio
 from dataclasses import dataclass, field
 from typing import Any, Dict, Optional, Tuple, Union
+
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -77,11 +81,13 @@ class VariantAnnotator:
             return match.groups()
         return None
     
-    async def _query_by_protein_change_async(self, session: aiohttp.ClientSession, gene: str, variant: str) -> dict | None:
+    async def _query_by_protein_change_async(
+        self, session: aiohttp.ClientSession, gene: str, variant: str
+    ) -> tuple[dict | None, str | None]:
         """Query MyVariant.info by protein change (Async)."""
         parsed = self._parse_protein_change(variant)
         if not parsed:
-            return None
+            return None, None
         
         ref_aa, pos, alt_aa = parsed
         query = f"dbnsfp.genename:{gene} AND dbnsfp.aaref:{ref_aa} AND dbnsfp.aapos:{pos} AND dbnsfp.aaalt:{alt_aa}"
@@ -92,21 +98,31 @@ class VariantAnnotator:
         }
         
         try:
-            async with session.get(f"{self.base_url}/query", params=params, timeout=self.timeout) as response:
+            async with session.get(
+                f"{self.base_url}/query", params=params, timeout=self.timeout
+            ) as response:
                 if response.status == 200:
                     data = await response.json()
                     hits = data.get("hits", [])
                     if hits:
-                        return hits[0]
-        except Exception:
-            pass
-        return None
+                        return hits[0], None
+                error_msg = (
+                    f"MyVariant protein change query failed with status {response.status} "
+                    f"for params {params}"
+                )
+                logger.error(error_msg)
+                return None, error_msg
+        except Exception as exc:
+            error_msg = f"MyVariant protein change query error for params {params}: {exc}"
+            logger.exception(error_msg)
+            return None, error_msg
+        return None, None
 
-    def _query_by_protein_change(self, gene: str, variant: str) -> dict | None:
+    def _query_by_protein_change(self, gene: str, variant: str) -> tuple[dict | None, str | None]:
         """Query MyVariant.info by protein change."""
         parsed = self._parse_protein_change(variant)
         if not parsed:
-            return None
+            return None, None
         
         ref_aa, pos, alt_aa = parsed
         
@@ -119,21 +135,29 @@ class VariantAnnotator:
             "size": 5
         }
         
-        response = requests.get(
-            f"{self.base_url}/query",
-            params=params,
-            timeout=self.timeout
-        )
-        
-        if response.status_code == 200:
-            data = response.json()
-            hits = data.get("hits", [])
-            if hits:
-                return hits[0]
-        
-        return None
+        try:
+            response = requests.get(
+                f"{self.base_url}/query", params=params, timeout=self.timeout
+            )
+            if response.status_code == 200:
+                data = response.json()
+                hits = data.get("hits", [])
+                if hits:
+                    return hits[0], None
+            error_msg = (
+                f"MyVariant protein change query failed with status {response.status_code} "
+                f"for params {params}"
+            )
+            logger.error(error_msg)
+            return None, error_msg
+        except Exception as exc:
+            error_msg = f"MyVariant protein change query error for params {params}: {exc}"
+            logger.exception(error_msg)
+            return None, error_msg
     
-    async def _query_by_hgvs_async(self, session: aiohttp.ClientSession, gene: str, hgvs: str) -> dict | None:
+    async def _query_by_hgvs_async(
+        self, session: aiohttp.ClientSession, gene: str, hgvs: str
+    ) -> tuple[dict | None, str | None]:
         """Query MyVariant.info by HGVS notation (Async)."""
         params = {
             "q": f"{gene}:{hgvs}",
@@ -141,17 +165,26 @@ class VariantAnnotator:
             "size": 5
         }
         try:
-            async with session.get(f"{self.base_url}/query", params=params, timeout=self.timeout) as response:
+            async with session.get(
+                f"{self.base_url}/query", params=params, timeout=self.timeout
+            ) as response:
                 if response.status == 200:
                     data = await response.json()
                     hits = data.get("hits", [])
                     if hits:
-                        return hits[0]
-        except Exception:
-            pass
-        return None
+                        return hits[0], None
+                error_msg = (
+                    f"MyVariant HGVS query failed with status {response.status} for params {params}"
+                )
+                logger.error(error_msg)
+                return None, error_msg
+        except Exception as exc:
+            error_msg = f"MyVariant HGVS query error for params {params}: {exc}"
+            logger.exception(error_msg)
+            return None, error_msg
+        return None, None
 
-    def _query_by_hgvs(self, gene: str, hgvs: str) -> dict | None:
+    def _query_by_hgvs(self, gene: str, hgvs: str) -> tuple[dict | None, str | None]:
         """Query MyVariant.info by HGVS notation."""
         # Try direct HGVS query
         params = {
@@ -159,20 +192,25 @@ class VariantAnnotator:
             "fields": "clinvar,dbsnp,cadd,dbnsfp,cosmic",
             "size": 5
         }
-        
-        response = requests.get(
-            f"{self.base_url}/query",
-            params=params,
-            timeout=self.timeout
-        )
-        
-        if response.status_code == 200:
-            data = response.json()
-            hits = data.get("hits", [])
-            if hits:
-                return hits[0]
-        
-        return None
+        try:
+            response = requests.get(
+                f"{self.base_url}/query", params=params, timeout=self.timeout
+            )
+
+            if response.status_code == 200:
+                data = response.json()
+                hits = data.get("hits", [])
+                if hits:
+                    return hits[0], None
+            error_msg = (
+                f"MyVariant HGVS query failed with status {response.status_code} for params {params}"
+            )
+            logger.error(error_msg)
+            return None, error_msg
+        except Exception as exc:
+            error_msg = f"MyVariant HGVS query error for params {params}: {exc}"
+            logger.exception(error_msg)
+            return None, error_msg
     
     def _extract_coordinates(self, hit: dict) -> dict:
         """Extract genomic coordinates from MyVariant.info hit."""
@@ -308,18 +346,23 @@ class VariantAnnotator:
     async def annotate_async(self, gene: str, variant: str) -> VariantAnnotation:
         """Annotate a variant asynchronously."""
         annotation = VariantAnnotation(gene=gene, variant=variant)
-        
+        errors: list[str] = []
+
         try:
             async with aiohttp.ClientSession() as session:
                 hit = None
-                
+
                 # Strategy 1: Protein change
-                hit = await self._query_by_protein_change_async(session, gene, variant)
-                
+                hit, error = await self._query_by_protein_change_async(session, gene, variant)
+                if error:
+                    errors.append(error)
+
                 # Strategy 2: HGVS notation
                 if not hit:
-                    hit = await self._query_by_hgvs_async(session, gene, variant)
-                
+                    hit, error = await self._query_by_hgvs_async(session, gene, variant)
+                    if error:
+                        errors.append(error)
+
                 # Strategy 3: Direct search
                 if not hit:
                     params = {
@@ -328,23 +371,38 @@ class VariantAnnotator:
                         "size": 5
                     }
                     try:
-                        async with session.get(f"{self.base_url}/query", params=params, timeout=self.timeout) as response:
+                        async with session.get(
+                            f"{self.base_url}/query", params=params, timeout=self.timeout
+                        ) as response:
                             if response.status == 200:
                                 data = await response.json()
                                 hits = data.get("hits", [])
                                 if hits:
                                     hit = hits[0]
-                    except Exception:
-                        pass
-                
+                            else:
+                                error_msg = (
+                                    f"MyVariant direct search failed with status {response.status} "
+                                    f"for params {params}"
+                                )
+                                logger.error(error_msg)
+                                errors.append(error_msg)
+                    except Exception as exc:
+                        error_msg = f"MyVariant direct search error for params {params}: {exc}"
+                        logger.exception(error_msg)
+                        errors.append(error_msg)
+
                 if hit:
                     annotation = self._process_hit(hit, annotation)
+                elif errors:
+                    annotation.error = "; ".join(errors)
                 else:
                     annotation.error = f"Variant {gene}:{variant} not found in databases"
-                    
+
         except Exception as e:
-            annotation.error = str(e)
-            
+            error_msg = f"Unexpected error during async annotation for {gene}:{variant}: {e}"
+            logger.exception(error_msg)
+            annotation.error = error_msg
+
         return annotation
 
     def annotate(self, gene: str, variant: str) -> VariantAnnotation:
@@ -359,18 +417,24 @@ class VariantAnnotator:
             VariantAnnotation with all available information
         """
         annotation = VariantAnnotation(gene=gene, variant=variant)
-        
+
+        errors: list[str] = []
+
         try:
             # Try different query strategies
             hit = None
-            
+
             # Strategy 1: Protein change
-            hit = self._query_by_protein_change(gene, variant)
-            
+            hit, error = self._query_by_protein_change(gene, variant)
+            if error:
+                errors.append(error)
+
             # Strategy 2: HGVS notation
             if not hit:
-                hit = self._query_by_hgvs(gene, variant)
-            
+                hit, error = self._query_by_hgvs(gene, variant)
+                if error:
+                    errors.append(error)
+
             # Strategy 3: Direct search
             if not hit:
                 params = {
@@ -378,25 +442,39 @@ class VariantAnnotator:
                     "fields": "clinvar,dbsnp,cadd,dbnsfp,cosmic",
                     "size": 5
                 }
-                response = requests.get(
-                    f"{self.base_url}/query",
-                    params=params,
-                    timeout=self.timeout
-                )
-                if response.status_code == 200:
-                    data = response.json()
-                    hits = data.get("hits", [])
-                    if hits:
-                        hit = hits[0]
-            
+                try:
+                    response = requests.get(
+                        f"{self.base_url}/query", params=params, timeout=self.timeout
+                    )
+                    if response.status_code == 200:
+                        data = response.json()
+                        hits = data.get("hits", [])
+                        if hits:
+                            hit = hits[0]
+                    else:
+                        error_msg = (
+                            f"MyVariant direct search failed with status {response.status_code} "
+                            f"for params {params}"
+                        )
+                        logger.error(error_msg)
+                        errors.append(error_msg)
+                except Exception as exc:
+                    error_msg = f"MyVariant direct search error for params {params}: {exc}"
+                    logger.exception(error_msg)
+                    errors.append(error_msg)
+
             if hit:
                 annotation = self._process_hit(hit, annotation)
+            elif errors:
+                annotation.error = "; ".join(errors)
             else:
                 annotation.error = f"Variant {gene}:{variant} not found in databases"
-        
+
         except Exception as e:
-            annotation.error = str(e)
-        
+            error_msg = f"Unexpected error during annotation for {gene}:{variant}: {e}"
+            logger.exception(error_msg)
+            annotation.error = error_msg
+
         return annotation
 
 
