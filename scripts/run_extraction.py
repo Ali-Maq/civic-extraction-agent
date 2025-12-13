@@ -32,9 +32,31 @@ from client import CivicExtractionClient
 
 async def run_extraction(paper_id: str, papers_dir: str = None, verbose: bool = True) -> dict:
     """Run extraction with Reader-first architecture."""
-    
+
     start_time = datetime.now()
-    
+
+    def _normalize_authors(value):
+        if not value:
+            return None
+        if isinstance(value, list):
+            value = ", ".join([str(v).strip() for v in value if str(v).strip()])
+        else:
+            value = str(value).strip()
+        if not value or value.lower() == "unknown":
+            return None
+        return value
+
+    def _normalize_year(value):
+        if value is None:
+            return None
+        if isinstance(value, (int, float)):
+            value = str(int(value))
+        else:
+            value = str(value).strip()
+        if not value or value.lower() == "unknown":
+            return None
+        return value
+
     if papers_dir is None:
         papers_dir = PAPERS_DIR
     
@@ -262,13 +284,45 @@ async def run_extraction(paper_id: str, papers_dir: str = None, verbose: bool = 
     end_time = datetime.now()
     items = context.state.final_extractions if context.state.is_complete else context.state.draft_extractions
     
+    reader_metadata = getattr(context, "paper_content", {}) or {}
+    reader_author = _normalize_authors(reader_metadata.get("authors"))
+    reader_year = _normalize_year(reader_metadata.get("year"))
+
+    paper_author = _normalize_authors(context.paper.author if context.paper else None)
+    paper_year = _normalize_year(context.paper.year if context.paper else None)
+
+    author_value = reader_author or paper_author or "Unknown"
+    year_value = reader_year or paper_year or "Unknown"
+
+    if context.paper:
+        context.paper.author = author_value
+        context.paper.year = year_value
+
+    paper_type = (
+        context.state.extraction_plan.paper_type if context.state.extraction_plan else None
+    ) or (context.paper_content.get("paper_type") if context.paper_content else None)
+
+    # Keep state.paper_info aligned with the latest metadata
+    if context.state:
+        if context.paper:
+            context.state.paper_info = context.paper
+        if isinstance(context.state.paper_info, dict):
+            context.state.paper_info.update(
+                {
+                    "author": author_value,
+                    "year": year_value,
+                    "num_pages": context.paper.num_pages if context.paper else 0,
+                    "paper_type": paper_type or "",
+                }
+            )
+
     results = {
         "paper_id": paper_id,
         "paper_info": {
-            "author": context.paper.author,
-            "year": context.paper.year,
+            "author": author_value,
+            "year": year_value,
             "num_pages": context.paper.num_pages,
-            "paper_type": context.state.extraction_plan.paper_type if context.state.extraction_plan else None
+            "paper_type": paper_type,
         },
         "extraction": {
             "items": len(items),

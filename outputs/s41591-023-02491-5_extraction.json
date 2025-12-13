@@ -1,8 +1,8 @@
 {
   "paper_id": "s41591-023-02491-5",
   "paper_info": {
-    "author": "Unknown",
-    "year": "Unknown",
+    "author": "Holly Lee, Sungwoo Ahn, Ranjan Maity, Noemie Leblay, Bachisio Zicheddu, Marietta Truger, Moritz Chorianopoulos, Anthony Cirincione, Michael Durante, Eileen M. Boyle, Remi Maura, Ola Landgren, Manasse Oualkacha, Sarthak Sinha, John McIntyre, Angela M.Y. Chan, Holly Wilson, Shari Kyman, Amrita Krishnan, Ola Landgren, Wencke Walter, Manja Meggendorfer, Claudia Haferlach, Torsten Haferlach, Hermann Einsele, Martin K. Kortum, Stefan Knop, Jean Baptiste Alberge, Andreas Rosenwald, Jonathan J. Keats, Leo Rasche, Francesco Maura, Paola Neri, Nizar J. Bahlis",
+    "year": "2023",
     "num_pages": 34,
     "paper_type": "PRIMARY"
   },
@@ -537,9 +537,9 @@
     "clinical_trials": "NCT03651128 (teclistamab trial)\nNCT03145181 (Ide-cel trial, protocol no. bb2121; ClinicalTrials.gov identifier NCT03361972)\nNCT03314597 (elranatamab trial, protocol no. C1071001)\nNCT03326336 (talquetamab trial, protocol no. C1071005)\nNCT01454297 (GPRC5D trial)\nNCT04108624 (anti-GPRC5D trial, protocol no. 64407564MM1002)\nbb2121-MM-003 (Ide-cel trial identifier)\n\nReferenced trials/studies:\n- MajesTEC-1 (teclistamab study)\n- CARTITUDE-1 (Ide-cel study) \n- CARTITUDE-2 (Ide-cel study)\n- CARTITUDE-4 (Ide-cel study)\n- MagnetisMM-3 (elranatamab study)\n- MonumenTAL-1 (talquetamab study)\n- MMRF (Multiple Myeloma Research Foundation) trial NCT01454297\n- 5,000 Genomes project\n- MLL Munich Leukemia Laboratory WGS dataset"
   },
   "timing": {
-    "start": "2025-12-12T03:13:27.571945",
-    "end": "2025-12-12T03:25:25.310250",
-    "seconds": 717.738305
+    "start": "2025-12-13T03:18:30.695197",
+    "end": "2025-12-13T03:18:36.735912",
+    "seconds": 6.040715
   },
-  "log_file": "/Users/ali/Downloads/civic/civic_extraction_end_to_end/logs/s41591-023-02491-5_20251212_031327.log"
+  "log_file": "/workspace/civic-extraction-agent/logs/s41591-023-02491-5_20251213_031830.log"
 }
