@@ -116,18 +116,6 @@ describe("App frontend orchestration", () => {
     expect(screen.getByText(/Iterations: 1/)).toBeInTheDocument();
     expect(screen.getByText(/Duration/)).toBeInTheDocument();
 
-    // Plan panel present (on Plan tab)
-    fireEvent.click(screen.getByText("Plan & Critique"));
-    expect(await screen.findByText("Extraction Plan")).toBeInTheDocument();
-    expect(screen.getByText("Focus on resistance items")).toBeInTheDocument();
-
-    // Critique panel present
-    expect(screen.getByText("Final Critique")).toBeInTheDocument();
-    expect(screen.getByText("APPROVE")).toBeInTheDocument();
-
-    // Back to output tab
-    fireEvent.click(screen.getByText("Final Output"));
-
     // Evidence table columns for ABN data points
     expect(await screen.findByText("Variant")).toBeInTheDocument();
     expect(screen.getByText("Origin")).toBeInTheDocument();
@@ -149,7 +137,7 @@ describe("App frontend orchestration", () => {
 
     // Checkpoints JSON button
     fireEvent.click(screen.getByText("Checkpoints"));
-    expect(await screen.findByText(/View 01_reader_output/)).toBeInTheDocument();
+    expect(await screen.findByText(/Raw 01_reader_output/)).toBeInTheDocument();
   });
 
   it("offers JSON modal for final output", async () => {

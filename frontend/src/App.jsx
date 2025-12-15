@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
+import ForceGraph2D from "react-force-graph-2d";
 import "./App.css";
 
 // Default to API on 4177 unless overridden.
 const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:4177";
-
 async function fetchJson(url) {
   const res = await fetch(url);
   if (!res.ok) throw new Error(`Request failed: ${res.status}`);
@@ -128,37 +128,166 @@ function EvidenceTable({ items }) {
 
   return (
     <div className="table-wrapper">
-      <table className="table">
-        <thead>
-          <tr>
-            {cols.map((c) => (
-              <th key={c.key}>{c.label}</th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
+    <table className="table">
+      <thead>
+        <tr>
+          {cols.map((c) => (
+            <th key={c.key}>{c.label}</th>
+          ))}
+        </tr>
+      </thead>
+      <tbody>
           {items.map((raw, idx) => {
-            const item = normalizeRow(raw);
-            return (
-              <tr key={idx}>
-                {cols.map((c) => (
-                  <td
-                    key={c.key}
-                    className={c.tooltip ? "ellipsis" : ""}
+          const item = normalizeRow(raw);
+          return (
+            <tr key={idx}>
+              {cols.map((c) => (
+                <td
+                  key={c.key}
+                  className={c.tooltip ? "ellipsis" : ""}
                     title={c.tooltip ? (Array.isArray(item[c.key]) ? item[c.key].join(", ") : item[c.key] || "") : undefined}
-                  >
-                    {Array.isArray(item[c.key])
+                >
+                  {Array.isArray(item[c.key])
                       ? item[c.key].length
-                        ? item[c.key].join(", ")
+                    ? item[c.key].join(", ")
                         : "—"
-                      : item[c.key] || "—"}
-                  </td>
-                ))}
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+                    : item[c.key] || "—"}
+                </td>
+              ))}
+            </tr>
+          );
+        })}
+      </tbody>
+    </table>
+    </div>
+  );
+}
+
+function PdfViewer({ url, onError }) {
+  const [numPages, setNumPages] = useState(null);
+  const [page, setPage] = useState(1);
+  const [error, setError] = useState("");
+
+  if (!url) return <div className="muted">PDF not available.</div>;
+  if (error) {
+    if (onError) onError(error);
+    return <div className="muted">PDF error: {error}</div>;
+  }
+
+  const next = () => setPage((p) => Math.min((numPages || p), p + 1));
+  const prev = () => setPage((p) => Math.max(1, p - 1));
+
+  return (
+    <div className="pdf-viewer">
+      <div className="pdf-controls">
+        <button className="pill" onClick={prev} disabled={page <= 1}>
+          ◀ Prev
+        </button>
+        <span className="muted small">
+          Page {page} {numPages ? `of ${numPages}` : ""}
+        </span>
+        <button className="pill" onClick={next} disabled={numPages ? page >= numPages : false}>
+          Next ▶
+        </button>
+        <a className="pill link-pill" href={url} target="_blank" rel="noreferrer">
+          Download
+        </a>
+      </div>
+      <div className="pdf-canvas">
+        <Document
+          file={{ url, httpHeaders: { Accept: "application/pdf" }, withCredentials: false }}
+          onLoadSuccess={({ numPages: n }) => {
+            setNumPages(n);
+            setError("");
+          }}
+          onLoadError={(err) => setError(err?.message || "Failed to load PDF")}
+        >
+          <Page pageNumber={page} width={800} renderAnnotationLayer={false} renderTextLayer={false} />
+        </Document>
+      </div>
+    </div>
+  );
+}
+
+// Removed PdfViewer (react-pdf). Using iframe/embed fallback only.
+
+function EvidenceCards({ items }) {
+  if (!items?.length) return <div className="muted">No evidence items found.</div>;
+  const normalize = (item) => ({
+    ...item,
+    therapies: item.therapies || [],
+    therapy_names: item.therapy_names || (item.therapies ? item.therapies.map((t) => t.name) : []),
+    variant_hgvs_descriptions: item.variant_hgvs_descriptions || item.variant_hgvs || [],
+    clinical_trial_nct_ids: item.clinical_trial_nct_ids || [],
+  });
+  return (
+    <div className="card-grid">
+      {items.map((raw, idx) => {
+        const it = normalize(raw);
+        return (
+          <div className="card evidence-card" key={idx}>
+            <div className="card-title">{(it.feature_names && it.feature_names.join?.(", ")) || "—"}</div>
+            <div className="muted small strong">{(it.variant_names && it.variant_names.join?.(", ")) || "—"}</div>
+            <div className="pill-row">
+              <Pill>{it.evidence_type || "—"}</Pill>
+              <Pill>{it.evidence_level || "—"}</Pill>
+              <Pill>{it.evidence_direction || "—"}</Pill>
+              <Pill>{it.evidence_significance || "—"}</Pill>
+            </div>
+            <div className="kv">
+              <span className="label">Disease</span>
+              <span>{it.disease_name || "—"}</span>
+            </div>
+            <div className="kv">
+              <span className="label">Therapy</span>
+              <span>{(it.therapy_names && it.therapy_names.join?.(", ")) || "—"}</span>
+            </div>
+            <div className="kv">
+              <span className="label">Trials</span>
+              <span>{it.clinical_trial_nct_ids.length ? it.clinical_trial_nct_ids.join(", ") : "—"}</span>
+            </div>
+            <div className="kv">
+              <span className="label">Coords</span>
+              <span>
+                {it.reference_build || "—"} · {it.chromosome || "—"}:{it.start_position || "—"}-{it.stop_position || "—"}
+              </span>
+            </div>
+            <div className="kv">
+              <span className="label">HGVS</span>
+              <span>{it.variant_hgvs_descriptions.length ? it.variant_hgvs_descriptions.join(", ") : "—"}</span>
+            </div>
+            <div className="kv">
+              <span className="label">CCF / Cohort</span>
+              <span>
+                {it.cancer_cell_fraction || "—"} / {it.cohort_size || "—"}
+              </span>
+            </div>
+            <div className="kv">
+              <span className="label">Source</span>
+              <span>
+                {it.source_title || "—"} ({it.source_journal || "—"}, {it.source_publication_year || "—"},{" "}
+                {it.source_page_numbers || "—"})
+              </span>
+            </div>
+            <div className="quote-block">
+              <div className="label tiny">Quote</div>
+              <div className="muted tiny ellipsis" title={it.verbatim_quote || ""}>
+                “{it.verbatim_quote || "No quote"}”
+              </div>
+            </div>
+            <div className="quote-block">
+              <div className="label tiny">Reasoning</div>
+              <div className="muted tiny">{it.extraction_reasoning || "No reasoning"}</div>
+            </div>
+            <div className="muted tiny">
+              Confidence:{" "}
+              {typeof it.extraction_confidence === "number"
+                ? `${Math.round(it.extraction_confidence * 100)}%`
+                : it.extraction_confidence || "—"}
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -178,132 +307,38 @@ function Collapse({ title, summary, children, defaultOpen = false }) {
   );
 }
 
-function PhaseSummaries({ phases }) {
-  const entries = [
-    { key: "reader", label: "Reader (01)", data: phases.reader, desc: "PDF → structured text" },
-    { key: "planner", label: "Planner (02)", data: phases.planner, desc: "Strategy & expected items" },
-    { key: "extractor", label: "Extractor (03)", data: phases.extractor, desc: "Draft evidence items" },
-    { key: "critic", label: "Critic (03b)", data: phases.critic, desc: "Validation & feedback" },
-    { key: "normalizer", label: "Normalizer (04)", data: phases.normalizer, desc: "IDs & final items" },
-  ];
-
-  return (
-    <div className="phase-grid">
-      {entries.map(({ key, label, data, desc }) => (
-        <div className="card" key={key}>
-          <div className="card-title">{label}</div>
-          {data ? (
-            <>
-              {data.summary && <div className="muted small">{data.summary}</div>}
-              {data.items && (
-                <div className="muted small">
-                  Items: <strong>{data.items.length}</strong>
-                </div>
-              )}
-              {desc && <div className="muted small">{desc}</div>}
-            </>
-          ) : (
-            <div className="muted small">No data</div>
-          )}
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function PhaseDetails({ phases }) {
-  const renderList = (items) =>
-    !items || !items.length ? (
-      <div className="muted small">No items</div>
-    ) : (
-      <ul className="plain-list">
-        {items.map((it, idx) => (
-          <li key={idx}>
-            <strong>{it.variant_names || it.feature_names}</strong> — {it.therapy_names || "—"} —{" "}
-            {it.disease_name || "—"} ({it.evidence_type || "type"})
-          </li>
-        ))}
-      </ul>
-    );
-
-  return (
-    <div className="checkpoint-grid">
-      <Collapse title="Reader (01) – paper content" summary={phases.reader?.summary}>
-        <pre className="pre small">
-          {phases.reader?.content ? JSON.stringify(phases.reader.content, null, 2) : "No content"}
-        </pre>
-      </Collapse>
-
-      <Collapse title="Planner (02) – plan" summary={phases.planner?.summary}>
-        <pre className="pre small">
-          {phases.planner?.plan ? JSON.stringify(phases.planner.plan, null, 2) : "No plan"}
-        </pre>
-      </Collapse>
-
-      <Collapse
-        title="Extractor (03) – draft extractions"
-        summary={phases.extractor?.items ? `${phases.extractor.items.length} items` : ""}
-      >
-        {renderList(phases.extractor?.items)}
-        <pre className="pre small">
-          {phases.extractor?.raw ? JSON.stringify(phases.extractor.raw, null, 2) : "No data"}
-        </pre>
-      </Collapse>
-
-      <Collapse
-        title="Critic (03b) – feedback"
-        summary={
-          phases.critic?.critique
-            ? `${phases.critic?.critique.overall_assessment || ""}`
-            : ""
-        }
-      >
-        {phases.critic?.critique ? (
-          <>
-            <div className="muted small">
-              Assessment: <strong>{phases.critic.critique.overall_assessment}</strong>
-            </div>
-            <div className="muted small">
-              Missing items: {phases.critic.critique.missing_items?.length || 0} · Extra items:{" "}
-              {phases.critic.critique.extra_items?.length || 0}
-            </div>
-            <pre className="pre small">{JSON.stringify(phases.critic.critique, null, 2)}</pre>
-          </>
-        ) : (
-          <div className="muted small">No data</div>
-        )}
-      </Collapse>
-
-      <Collapse
-        title="Normalizer (04) – final extractions"
-        summary={phases.normalizer?.items ? `${phases.normalizer.items.length} items` : ""}
-      >
-        {renderList(phases.normalizer?.items)}
-        <pre className="pre small">
-          {phases.normalizer?.raw ? JSON.stringify(phases.normalizer.raw, null, 2) : "No data"}
-        </pre>
-      </Collapse>
-    </div>
-  );
-}
+// Phase summaries/details replaced by CheckpointDeck for richer structured view.
 
 function Timeline({ events }) {
   if (!events?.length) return <div className="muted">No timeline events.</div>;
+  const recent = events.slice(-200);
+  const grouped = recent.reduce((acc, ev) => {
+    const key = ev.hook || ev.event || "other";
+    acc[key] = acc[key] || [];
+    acc[key].push(ev);
+    return acc;
+  }, {});
   return (
     <div className="timeline">
-      {events.slice(-200).map((ev, idx) => (
-        <div className="timeline-item" key={idx}>
-          <div className="timeline-meta">
-            <span className="pill">{ev.hook || ev.event}</span>
-            <span className="muted small">{ev.ts}</span>
-          </div>
-          <div className="timeline-body">
-            <div className="muted small">
-              tool: {ev.tool || "—"} · input: {ev.input_keys?.join(", ") || "—"}
+      {Object.entries(grouped).map(([hook, list]) => (
+        <div className="timeline-group" key={hook}>
+          <div className="timeline-group-header">
+            <span className="pill">{hook}</span>
+            <span className="muted small">{list.length} events</span>
+                </div>
+          {list.map((ev, idx) => (
+            <div className="timeline-item" key={`${hook}-${idx}`}>
+              <div className="timeline-meta">
+                <span className="muted small">{ev.ts}</span>
+                <span className="muted tiny">{ev.tool || "—"}</span>
+              </div>
+              <div className="timeline-body">
+                <div className="muted small">input: {ev.input_keys?.join(", ") || "—"}</div>
+                {ev.output_summary && <div className="muted small">result: {ev.output_summary}</div>}
+                {ev.text && <div className="muted small">msg: {ev.text}</div>}
+              </div>
             </div>
-            {ev.output_summary && <div className="muted small">result: {ev.output_summary}</div>}
-            {ev.text && <div className="muted small">msg: {ev.text}</div>}
-          </div>
+          ))}
         </div>
       ))}
     </div>
@@ -376,10 +411,10 @@ function CritiquePanel({ critique }) {
       <div className="critique-grid">
         <Collapse title="Summary" defaultOpen>
           <pre className="pre small">{critique.summary || "No summary"}</pre>
-        </Collapse>
+      </Collapse>
         <Collapse title="Item feedback">
           <pre className="pre small">{critique.item_feedback || "No item feedback"}</pre>
-        </Collapse>
+      </Collapse>
         <Collapse title="Missing items">
           <pre className="pre small">{critique.missing_items || "No missing items"}</pre>
         </Collapse>
@@ -460,6 +495,116 @@ function StatsGrid({ evidence }) {
   );
 }
 
+function CheckpointDeck({ phases, pdfUrl, onOpenRaw }) {
+  const reader = phases.reader;
+  const planner = phases.planner?.plan;
+  const extractorItems = phases.extractor?.items || [];
+  const critic = phases.critic?.critique;
+  const normalizerItems = phases.normalizer?.items || [];
+
+  const topList = (items) => (items || []).slice(0, 3);
+
+  return (
+    <div className="deck-grid">
+      <div className="card">
+        <div className="card-title">Reader (01)</div>
+        <div className="muted small">{reader?.content?.title || "—"}</div>
+            <div className="muted small">
+          {reader?.content?.journal || "—"} · {reader?.content?.year || "—"} · pgs {reader?.content?.num_pages || "—"}
+            </div>
+        <div className="muted small">Type: {reader?.content?.paper_type || "—"}</div>
+            <div className="muted small">
+          Sections: {(reader?.content?.sections || []).map((s) => s.name).join(", ") || "—"}
+            </div>
+        <div className="muted small">
+          NCT IDs: {reader?.content?.nct_ids ? JSON.stringify(reader.content.nct_ids) : "—"}
+        </div>
+        {pdfUrl && (
+          <a className="pill link-pill" href={pdfUrl} target="_blank" rel="noreferrer">
+            Open PDF
+          </a>
+        )}
+        {onOpenRaw && (
+          <button className="pill" onClick={() => onOpenRaw("Reader (01)", phases.reader)}>
+            Raw Reader
+          </button>
+        )}
+      </div>
+
+      <div className="card">
+        <div className="card-title">Planner (02)</div>
+        <div className="muted small">Expected items: {planner?.expected_items ?? "—"}</div>
+        <div className="muted small">Key variants: {planner?.key_variants || "—"}</div>
+        <div className="muted small">Key therapies: {planner?.key_therapies || "—"}</div>
+        <div className="muted small">Key diseases: {planner?.key_diseases || "—"}</div>
+        <div className="muted small">Focus sections: {planner?.focus_sections || "—"}</div>
+        {onOpenRaw && (
+          <button className="pill" onClick={() => onOpenRaw("Planner (02)", phases.planner)}>
+            Raw Planner
+          </button>
+        )}
+      </div>
+
+      <div className="card">
+        <div className="card-title">Extractor (03)</div>
+        <div className="muted small">Draft items: {extractorItems.length}</div>
+        <ul className="plain-list small">
+          {topList(extractorItems).map((it, idx) => (
+            <li key={idx}>
+              <strong>{it.feature_names?.join?.(", ") || "—"}</strong> · {it.variant_names?.join?.(", ") || "—"} ·{" "}
+              {it.therapy_names?.join?.(", ") || "—"} · {it.disease_name || "—"} ({it.evidence_direction || "—"})
+            </li>
+          ))}
+        </ul>
+        {onOpenRaw && (
+          <button className="pill" onClick={() => onOpenRaw("Extractor (03)", phases.extractor)}>
+            Raw Extractor
+          </button>
+        )}
+      </div>
+
+      <div className="card">
+        <div className="card-title">Critic (03b)</div>
+        <div className="pill-row">
+          <Pill kind={critic?.overall_assessment === "APPROVE" ? "success" : "warning"}>
+            {critic?.overall_assessment || "—"}
+          </Pill>
+        </div>
+        <div className="muted small">
+          Missing: {critic?.missing_items ? critic.missing_items.length : 0} · Extra:{" "}
+          {critic?.extra_items ? critic.extra_items.length : 0}
+        </div>
+        <div className="muted tiny ellipsis" title={critic?.summary || ""}>
+          {critic?.summary || "No summary"}
+        </div>
+        {onOpenRaw && (
+          <button className="pill" onClick={() => onOpenRaw("Critic (03b)", phases.critic)}>
+            Raw Critic
+          </button>
+        )}
+      </div>
+
+      <div className="card">
+        <div className="card-title">Normalizer (04)</div>
+        <div className="muted small">Final items: {normalizerItems.length}</div>
+        <ul className="plain-list small">
+          {topList(normalizerItems).map((it, idx) => (
+            <li key={idx}>
+              <strong>{it.feature_names?.join?.(", ") || "—"}</strong> · {it.variant_names?.join?.(", ") || "—"} ·{" "}
+              {it.therapy_names?.join?.(", ") || "—"} ({it.evidence_significance || "—"})
+            </li>
+          ))}
+        </ul>
+        {onOpenRaw && (
+          <button className="pill" onClick={() => onOpenRaw("Normalizer (04)", phases.normalizer)}>
+            Raw Normalizer
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function JsonModal({ open, title, data, onClose }) {
   if (!open) return null;
   return (
@@ -470,9 +615,64 @@ function JsonModal({ open, title, data, onClose }) {
           <button className="pill" onClick={onClose}>
             Close
           </button>
-        </div>
+          </div>
         <pre className="pre small modal-pre">{JSON.stringify(data, null, 2)}</pre>
-      </div>
+            </div>
+          </div>
+  );
+}
+
+function CheckpointCards({ phases }) {
+  const entries = [
+    {
+      key: "reader",
+      title: "Reader (01)",
+      summary: phases.reader?.summary,
+      detail: phases.reader?.content?.title || "No title",
+      meta: phases.reader?.content?.authors,
+    },
+    {
+      key: "planner",
+      title: "Planner (02)",
+      summary: phases.planner?.summary,
+      detail: phases.planner?.plan?.expected_items ? `Expected: ${phases.planner.plan.expected_items}` : "No plan",
+      meta: phases.planner?.plan?.key_variants,
+    },
+    {
+      key: "extractor",
+      title: "Extractor (03)",
+      summary: phases.extractor?.summary,
+      detail: phases.extractor?.items ? `Draft items: ${phases.extractor.items.length}` : "No items",
+      meta: phases.extractor?.items?.[0]?.disease_name,
+    },
+    {
+      key: "critic",
+      title: "Critic (03b)",
+      summary: phases.critic?.summary,
+      detail: phases.critic?.critique?.overall_assessment || "No critique",
+      meta: phases.critic?.critique?.missing_items?.length
+        ? `Missing: ${phases.critic.critique.missing_items.length}`
+        : "",
+    },
+    {
+      key: "normalizer",
+      title: "Normalizer (04)",
+      summary: phases.normalizer?.summary,
+      detail: phases.normalizer?.items ? `Final items: ${phases.normalizer.items.length}` : "No items",
+      meta: phases.normalizer?.items?.[0]?.therapy_names?.join(", "),
+    },
+  ];
+
+  return (
+    <div className="cp-card-grid">
+      {entries.map((e) => (
+        <div key={e.key} className="card cp-card">
+          <div className="card-title">{e.title}</div>
+          {e.summary && <div className="muted small">{e.summary}</div>}
+          <div className="muted small">{e.detail || "—"}</div>
+          {e.meta && <div className="muted tiny">{e.meta}</div>}
+        </div>
+      ))}
     </div>
   );
 }
@@ -484,17 +684,24 @@ function App() {
   const [checkpoints, setCheckpoints] = useState([]);
   const [phases, setPhases] = useState({});
   const [sessionEvents, setSessionEvents] = useState([]);
+  const [allEvidence, setAllEvidence] = useState([]);
+  const [graphFilters, setGraphFilters] = useState({
+    type: "ALL",
+    direction: "ALL",
+    search: "",
+    diseaseScope: "MM_ONLY",
+    minWeight: 0,
+  });
+  const [graphNode, setGraphNode] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [uploading, setUploading] = useState(false);
-  const [runMessage, setRunMessage] = useState("");
-  const [uploadFile, setUploadFile] = useState(null);
-  const [pdfPathInput, setPdfPathInput] = useState("");
   const [jsonModal, setJsonModal] = useState({ open: false, title: "", data: null });
   const [activeTab, setActiveTab] = useState("output");
+  const [viewMode, setViewMode] = useState("table");
   const [evidenceTypeFilter, setEvidenceTypeFilter] = useState("ALL");
   const [directionFilter, setDirectionFilter] = useState("ALL");
   const [searchTerm, setSearchTerm] = useState("");
+  const [pdfStatus, setPdfStatus] = useState({ checked: false, available: false, error: "" });
 
   function parseCheckpoints(raw) {
     const phases = { reader: null, planner: null, extractor: null, critic: null, normalizer: null };
@@ -557,28 +764,99 @@ function App() {
   }, []);
 
   useEffect(() => {
+    let canceled = false;
+    const loadAll = async () => {
+      try {
+        const outputs = await Promise.all(
+          (papers || [])
+            .filter((p) => p.hasOutput)
+            .map((p) =>
+              fetchJson(`${API_BASE}/api/papers/${p.id}/output`)
+                .then((res) => ({ id: p.id, evidence: res?.output?.extraction?.evidence_items || [] }))
+                .catch(() => ({ id: p.id, evidence: [] }))
+            )
+        );
+        if (canceled) return;
+        const merged = outputs.flatMap((o) =>
+          (o.evidence || []).map((ev, idx) => ({
+            ...ev,
+            __paperId: o.id,
+            __evidenceId: `${o.id}__${idx}`,
+          }))
+        );
+        setAllEvidence(merged);
+      } catch (err) {
+        if (!canceled) setError(err.message);
+      }
+    };
+    if (papers?.length) loadAll();
+    return () => {
+      canceled = true;
+    };
+  }, [papers]);
+
+  useEffect(() => {
+    let canceled = false;
     if (!selected) return;
+    // defer setState to avoid synchronous setState warning
+    setTimeout(() => {
+      if (canceled) return;
     setLoading(true);
     setError("");
+    }, 0);
     Promise.all([
       fetchJson(`${API_BASE}/api/papers/${selected}/output`).catch(() => null),
       fetchJson(`${API_BASE}/api/papers/${selected}/checkpoints`).catch(() => ({ checkpoints: [] })),
       fetchJson(`${API_BASE}/api/papers/${selected}/session`).catch(() => ({ events: [] })),
     ])
       .then(([out, cps, ses]) => {
+        if (canceled) return;
         setOutput(out?.output || null);
-        setCheckpoints(cps?.checkpoints || []);
-        setPhases(parseCheckpoints(cps?.checkpoints || []));
+        const sortedCheckpoints = (cps?.checkpoints || []).slice().sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+        setCheckpoints(sortedCheckpoints);
+        setPhases(parseCheckpoints(sortedCheckpoints));
         setSessionEvents(ses?.events || []);
       })
-      .catch((err) => setError(err.message))
-      .finally(() => setLoading(false));
+      .catch((err) => {
+        if (!canceled) setError(err.message);
+      })
+      .finally(() => {
+        if (!canceled) setLoading(false);
+      });
+    return () => {
+      canceled = true;
+    };
   }, [selected]);
 
   const pdfUrl = useMemo(() => {
     if (!selected) return null;
     return `${API_BASE}/api/papers/${selected}/pdf`;
   }, [selected]);
+
+  useEffect(() => {
+    let canceled = false;
+    if (!pdfUrl) {
+      setTimeout(() => {
+        if (!canceled) setPdfStatus({ checked: false, available: false, error: "" });
+      }, 0);
+      return;
+    }
+    setTimeout(() => {
+      if (!canceled) setPdfStatus({ checked: false, available: false, error: "" });
+    }, 0);
+    fetch(pdfUrl, { method: "HEAD" })
+      .then((res) => {
+        if (canceled) return;
+        setPdfStatus({ checked: true, available: res.ok, error: res.ok ? "" : "PDF not reachable" });
+      })
+      .catch(() => {
+        if (canceled) return;
+        setPdfStatus({ checked: true, available: false, error: "PDF not reachable" });
+      });
+    return () => {
+      canceled = true;
+    };
+  }, [pdfUrl]);
 
   const trials = useMemo(() => parseTrials(phases.reader?.content?.nct_ids), [phases]);
   const clean = (v) => (v && v !== "Unknown" ? v : "—");
@@ -597,41 +875,22 @@ function App() {
     return { pmid: firstPmid, pmcid: firstPmcid };
   }, [output]);
 
-  const handleRun = async () => {
-    try {
-      setUploading(true);
-      setRunMessage("");
-      const form = new FormData();
-      if (uploadFile) {
-        form.append("file", uploadFile);
-      } else if (pdfPathInput.trim()) {
-        form.append("pdfPath", pdfPathInput.trim());
-      } else {
-        setRunMessage("Provide a PDF file or a PDF path.");
-        setUploading(false);
-        return;
-      }
-      const res = await fetch(`${API_BASE}/api/extract`, {
-        method: "POST",
-        body: form,
-      });
-      const data = await res.json();
-      if (!res.ok || data.status === "error") {
-        setRunMessage(data.error || data.stderr || "Run failed");
-      } else {
-        setRunMessage("Run started/finished. Refreshing paper list...");
-        const refreshed = await fetchJson(`${API_BASE}/api/papers`);
-        setPapers(refreshed.papers || []);
-      }
-    } catch (err) {
-      setRunMessage(err.message);
-    } finally {
-      setUploading(false);
-    }
-  };
-
   const openJson = (title, data) => setJsonModal({ open: true, title, data });
   const closeJson = () => setJsonModal({ open: false, title: "", data: null });
+  const downloadJson = (data, filename) => {
+    if (!data) return;
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+  const copyText = (text) => {
+    if (!text) return;
+    navigator.clipboard?.writeText(text).catch(() => {});
+  };
 
   const paperTitle = phases.reader?.content?.title || output?.paper_info?.title || selected;
   const paperAuthors = phases.reader?.content?.authors || output?.paper_info?.author || "—";
@@ -639,7 +898,8 @@ function App() {
   const paperYear = phases.reader?.content?.year || output?.paper_info?.year || "—";
   const paperPages = phases.reader?.content?.num_pages || output?.paper_info?.num_pages || "—";
   const paperType = phases.reader?.content?.paper_type || output?.paper_info?.paper_type || "—";
-  const evidenceItems = output?.extraction?.evidence_items || [];
+  const currentPaper = papers.find((p) => p.id === selected);
+  const evidenceItems = useMemo(() => output?.extraction?.evidence_items || [], [output]);
   const filteredEvidence = useMemo(() => {
     return evidenceItems.filter((item) => {
       const matchesType = evidenceTypeFilter === "ALL" || item.evidence_type === evidenceTypeFilter;
@@ -651,13 +911,195 @@ function App() {
   }, [evidenceItems, evidenceTypeFilter, directionFilter, searchTerm]);
   const evidenceTypes = Array.from(new Set(evidenceItems.map((i) => i.evidence_type).filter(Boolean)));
   const directions = Array.from(new Set(evidenceItems.map((i) => i.evidence_direction).filter(Boolean)));
+  const graphTypes = Array.from(new Set(allEvidence.map((i) => i.evidence_type).filter(Boolean)));
+  const graphDirections = Array.from(new Set(allEvidence.map((i) => i.evidence_direction).filter(Boolean)));
+  const groundTruthPath =
+    selected && selected.startsWith("PMID_")
+      ? `/Users/ali/Downloads/civic/civic_data_analysis/ground_truth/${selected}_ground_truth.json`
+      : null;
+  const graphEvidence = useMemo(() => {
+    const term = graphFilters.search.trim().toLowerCase();
+    return (allEvidence || []).filter((item) => {
+      const matchesType = graphFilters.type === "ALL" || item.evidence_type === graphFilters.type;
+      const matchesDir = graphFilters.direction === "ALL" || item.evidence_direction === graphFilters.direction;
+      const matchesDisease =
+        graphFilters.diseaseScope === "ALL" ||
+        item.disease_efo_id === "EFO_0001378" ||
+        item.disease_name?.toLowerCase()?.includes("myeloma");
+      const haystack = JSON.stringify(item).toLowerCase();
+      const matchesSearch = !term || haystack.includes(term);
+      return matchesType && matchesDir && matchesDisease && matchesSearch;
+    });
+  }, [allEvidence, graphFilters]);
+
+  const calcWeight = (ev) => {
+    const levelScores = { A: 1.2, B: 1.0, C: 0.9, D: 0.7, CASE_STUDY: 0.5 };
+    const level = levelScores[ev.evidence_level] || 0.4;
+    const conf =
+      typeof ev.extraction_confidence === "number"
+        ? ev.extraction_confidence
+        : ev.extraction_confidence === "High"
+          ? 0.9
+          : 0.6;
+    const cohort = ev.cohort_size ? Math.min(Math.log10(ev.cohort_size + 1) / 3, 1) : 0.2;
+    return Math.max(0.2, level * (0.5 + conf * 0.4 + cohort * 0.3));
+  };
+
+  const significanceColor = (sig) => {
+    const s = (sig || "").toLowerCase();
+    if (s.includes("resist")) return "#ef4444";
+    if (s.includes("response") || s.includes("sensitivity")) return "#22c55e";
+    if (s.includes("poor") || s.includes("progress") || s.includes("outcome")) return "#f97316";
+    return "#6366f1";
+  };
+
+  const graphData = useMemo(() => {
+    const nodes = new Map();
+    const links = [];
+    const addNode = (id, label, kind, meta = {}) => {
+      if (!id) return;
+      if (!nodes.has(id)) nodes.set(id, { id, label, kind, ...meta });
+    };
+    graphEvidence.forEach((ev) => {
+      const evidId = ev.__evidenceId;
+      const diseaseId = ev.disease_efo_id || ev.disease_name || "Disease";
+      const outcome = ev.evidence_significance || ev.evidence_type || "Outcome";
+      const weight = calcWeight(ev);
+      const sigColor = significanceColor(ev.evidence_significance);
+
+      addNode(`claim:${evidId}`, ev.feature_names?.join?.(", ") || "Evidence", "evidence", {
+        paper: ev.__paperId,
+        weight,
+        sig: ev.evidence_significance,
+      });
+      addNode(`paper:${ev.__paperId}`, ev.__paperId, "paper");
+      addNode(`disease:${diseaseId}`, ev.disease_name || diseaseId, "disease");
+      (ev.feature_names || []).forEach((g) => addNode(`gene:${g}`, g, "gene"));
+      (ev.variant_names || []).forEach((v) => addNode(`alt:${v}`, v, "alteration"));
+      (ev.therapy_names || []).forEach((t) => addNode(`tx:${t}`, t, "therapy"));
+      addNode(`outcome:${outcome}`, outcome, "outcome");
+
+      links.push({ source: `paper:${ev.__paperId}`, target: `claim:${evidId}`, kind: "SUPPORTS", weight, color: sigColor });
+      links.push({ source: `claim:${evidId}`, target: `disease:${diseaseId}`, kind: "ABOUT_DISEASE", weight, color: sigColor });
+      (ev.feature_names || []).forEach((g) =>
+        links.push({ source: `claim:${evidId}`, target: `gene:${g}`, kind: "ABOUT_BIOMARKER", weight, color: sigColor })
+      );
+      (ev.variant_names || []).forEach((v) =>
+        links.push({ source: `claim:${evidId}`, target: `alt:${v}`, kind: "ABOUT_ALTERATION", weight, color: sigColor })
+      );
+      (ev.therapy_names || []).forEach((t) =>
+        links.push({ source: `claim:${evidId}`, target: `tx:${t}`, kind: "ABOUT_THERAPY", weight, color: sigColor })
+      );
+      links.push({ source: `claim:${evidId}`, target: `outcome:${outcome}`, kind: "HAS_SIGNIFICANCE", weight, color: sigColor });
+    });
+    return { nodes: Array.from(nodes.values()), links };
+  }, [graphEvidence]);
+
+  const graphDrillEvidence = useMemo(() => {
+    if (!graphNode) return [];
+    const id = graphNode.id;
+    if (id.startsWith("gene:")) {
+      const name = id.replace("gene:", "");
+      return graphEvidence.filter((ev) => ev.feature_names?.includes(name));
+    }
+    if (id.startsWith("alt:")) {
+      const name = id.replace("alt:", "");
+      return graphEvidence.filter((ev) => ev.variant_names?.includes(name));
+    }
+    if (id.startsWith("tx:")) {
+      const name = id.replace("tx:", "");
+      return graphEvidence.filter((ev) => ev.therapy_names?.includes(name));
+    }
+    if (id.startsWith("disease:")) {
+      const name = id.replace("disease:", "");
+      return graphEvidence.filter((ev) => (ev.disease_efo_id || ev.disease_name) === name);
+    }
+    if (id.startsWith("outcome:")) {
+      const name = id.replace("outcome:", "");
+      return graphEvidence.filter((ev) => (ev.evidence_significance || ev.evidence_type) === name);
+    }
+    if (id.startsWith("claim:")) {
+      const evidId = id.replace("claim:", "");
+      return graphEvidence.filter((ev) => ev.__evidenceId === evidId);
+    }
+    return [];
+  }, [graphNode, graphEvidence]);
+  const exportEvidenceCsv = () => {
+    if (!filteredEvidence.length) return;
+    const headers = [
+      "feature_names",
+      "variant_names",
+      "variant_origin",
+      "disease_name",
+      "therapy_names",
+      "evidence_type",
+      "evidence_level",
+      "evidence_direction",
+      "evidence_significance",
+      "clinical_trial_nct_ids",
+      "chromosome",
+      "reference_build",
+      "start_position",
+      "stop_position",
+      "variant_hgvs_descriptions",
+      "cancer_cell_fraction",
+      "cohort_size",
+      "source_title",
+      "source_publication_year",
+      "source_journal",
+      "source_page_numbers",
+      "verbatim_quote",
+      "extraction_confidence",
+      "extraction_reasoning",
+    ];
+    const rows = filteredEvidence.map((item) =>
+      headers
+        .map((key) => {
+          const val = item[key];
+          if (Array.isArray(val)) return `"${val.join("; ").replace(/"/g, '""')}"`;
+          if (val === undefined || val === null) return "";
+          return `"${String(val).replace(/"/g, '""')}"`;
+        })
+        .join(",")
+    );
+    const csv = [headers.join(","), ...rows].join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${selected || "evidence"}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
   return (
     <div className="layout">
       <aside className="sidebar">
-        <h2>Papers</h2>
+        <h2>Myeloma Evidence Papers</h2>
         <div className="paper-list">
-          {papers.map((p) => (
+          {papers.filter((p) => p.id.startsWith("PMID_")).length > 0 && (
+            <div className="section-label">CIViC PMIDs (with ground truth)</div>
+          )}
+          {papers
+            .filter((p) => p.id.startsWith("PMID_"))
+            .map((p) => (
+              <button
+                key={p.id}
+                className={`paper-btn ${selected === p.id ? "active" : ""}`}
+                onClick={() => setSelected(p.id)}
+              >
+                <div className="paper-title">{p.id.replace("PMID_", "PMID ")}</div>
+                <div className="paper-meta">
+                  CIViC · {p.hasOutput ? "✅ Output" : "…"} · {p.hasCheckpoints ? "💾 Checkpoints" : "…"}
+                </div>
+              </button>
+            ))}
+          {papers.filter((p) => !p.id.startsWith("PMID_")).length > 0 && (
+            <div className="section-label">New Papers (beyond CIViC)</div>
+          )}
+          {papers
+            .filter((p) => !p.id.startsWith("PMID_"))
+            .map((p) => (
             <button
               key={p.id}
               className={`paper-btn ${selected === p.id ? "active" : ""}`}
@@ -665,7 +1107,7 @@ function App() {
             >
               <div className="paper-title">{p.id}</div>
               <div className="paper-meta">
-                {p.hasOutput ? "✅ Output" : "…"} · {p.hasCheckpoints ? "💾 Checkpoints" : "…"}
+                  New · {p.hasOutput ? "✅ Output" : "…"} · {p.hasCheckpoints ? "💾 Checkpoints" : "…"}
               </div>
             </button>
           ))}
@@ -677,43 +1119,17 @@ function App() {
         <header className="header">
           <div>
             <h1>Evidence Extraction Viewer</h1>
-            <p className="muted">Reader → Planner → Extractor → Normalizer</p>
+            <p className="muted">
+              ONCO CITE case study on multiple myeloma papers: CIViC PMIDs show original ground truth; new papers extend
+              the set with higher-fidelity extractions. Navigate by paper to view PDF, checkpoints, and final outputs.
+            </p>
+            <p className="muted small">Pipeline: Reader → Planner → Extractor → Critic → Normalizer</p>
           </div>
           <div className="header-pills">
             {loading && <Pill>Loading…</Pill>}
             {error && <Pill kind="error">{error}</Pill>}
           </div>
         </header>
-
-        <div className="panel">
-          <SectionHeader
-            title="Upload or run a PDF"
-            right={uploading && <Pill>Running…</Pill>}
-          />
-          <div className="run-form">
-            <div className="field">
-              <label>Upload PDF</label>
-              <input
-                type="file"
-                accept="application/pdf"
-                onChange={(e) => setUploadFile(e.target.files?.[0] || null)}
-              />
-            </div>
-            <div className="field">
-              <label>Or existing PDF path</label>
-              <input
-                type="text"
-                value={pdfPathInput}
-                onChange={(e) => setPdfPathInput(e.target.value)}
-                placeholder="/absolute/path/to/paper.pdf"
-              />
-            </div>
-            <button className="run-btn" onClick={handleRun} disabled={uploading}>
-              Trigger Extraction
-            </button>
-            {runMessage && <div className="muted">{runMessage}</div>}
-          </div>
-        </div>
 
         {!selected && <div className="muted">Select a paper to view artifacts.</div>}
 
@@ -729,6 +1145,9 @@ function App() {
               <button className={`tab-btn ${activeTab === "plan" ? "active" : ""}`} onClick={() => setActiveTab("plan")}>
                 Plan & Critique
               </button>
+              <button className={`tab-btn ${activeTab === "graph" ? "active" : ""}`} onClick={() => setActiveTab("graph")}>
+                Knowledge Graph
+              </button>
               <button className={`tab-btn ${activeTab === "checkpoints" ? "active" : ""}`} onClick={() => setActiveTab("checkpoints")}>
                 Checkpoints
               </button>
@@ -743,14 +1162,41 @@ function App() {
                   title="Original PDF"
                   right={
                     pdfUrl ? (
-                      <a className="pill link-pill" href={pdfUrl} target="_blank" rel="noreferrer">
-                        Open in new tab
-                      </a>
+                      <div className="tag-row">
+                        <a className="pill link-pill" href={pdfUrl} target="_blank" rel="noreferrer">
+                          Open in new tab
+                        </a>
+                        <a className="pill" href={pdfUrl} download>
+                          Download
+                        </a>
+                      </div>
                     ) : null
                   }
                 />
                 {pdfUrl ? (
-                  <iframe className="pdf-frame" src={pdfUrl} title={selected} />
+                  pdfStatus.checked && !pdfStatus.available ? (
+                    <div className="muted">
+                      PDF not reachable at {pdfUrl}.{" "}
+                      <a href={pdfUrl} target="_blank" rel="noreferrer">
+                        Try opening directly
+                      </a>
+                    </div>
+                  ) : (
+                    <>
+                      {currentPaper?.pdfPath && (
+                        <div className="muted small">Resolved path: {currentPaper.pdfPath}</div>
+                      )}
+                      <object className="pdf-embed" data={`${pdfUrl}#view=FitH`} type="application/pdf">
+                        <iframe className="pdf-embed" src={pdfUrl} title={selected} />
+                        <div className="muted">
+                          Inline PDF failed.{" "}
+                          <a href={pdfUrl} target="_blank" rel="noreferrer">
+                            Open in new tab
+                          </a>
+                        </div>
+                      </object>
+                    </>
+                  )
                 ) : (
                   <div className="muted">PDF not available.</div>
                 )}
@@ -763,9 +1209,14 @@ function App() {
                   title="Final Output"
                   right={
                     output ? (
-                      <button className="pill" onClick={() => openJson("Final output JSON", output)}>
-                        View JSON
-                      </button>
+                      <div className="tag-row">
+                        <button className="pill" onClick={() => openJson("Final output JSON", output)}>
+                          View JSON
+                        </button>
+                        <button className="pill" onClick={() => downloadJson(output, `${selected || "final_output"}.json`)}>
+                          Download JSON
+                        </button>
+                      </div>
                     ) : null
                   }
                 />
@@ -777,6 +1228,7 @@ function App() {
                       <div className="muted small">Journal: {paperJournal}</div>
                       <div className="muted small">Year: {paperYear} · Pages: {paperPages}</div>
                       <div className="muted small">Type: {paperType}</div>
+                      {currentPaper?.pdfPath && <div className="muted small">PDF path: {currentPaper.pdfPath}</div>}
                       <div className="pill-row">
                         <Pill>Items: {output.extraction?.items ?? "—"}</Pill>
                         <Pill>Iterations: {output.extraction?.iterations ?? "—"}</Pill>
@@ -792,7 +1244,15 @@ function App() {
                         />
                       </div>
                       {output.log_file && <div className="muted small">Log file: {output.log_file}</div>}
-                    </div>
+                      {groundTruthPath && (
+                      <div className="muted small">
+                          Ground truth: {groundTruthPath}{" "}
+                          <button className="pill inline" onClick={() => copyText(groundTruthPath)}>
+                            Copy path
+                          </button>
+                      </div>
+                      )}
+                      </div>
 
                     <StatsGrid evidence={filteredEvidence} />
 
@@ -829,25 +1289,187 @@ function App() {
                         />
                       </div>
                       <div className="pill muted small">{filteredEvidence.length} / {evidenceItems.length} items</div>
+                      <button className="pill" onClick={exportEvidenceCsv} disabled={!filteredEvidence.length}>
+                        Export CSV
+                      </button>
+                      </div>
+
+                    <div className="view-toggle">
+                      <button className={`pill ${viewMode === "table" ? "active" : ""}`} onClick={() => setViewMode("table")}>
+                        Table
+                      </button>
+                      <button className={`pill ${viewMode === "cards" ? "active" : ""}`} onClick={() => setViewMode("cards")}>
+                        Cards
+                      </button>
                     </div>
 
-                    <EvidenceTable items={filteredEvidence} />
+                    {viewMode === "table" ? <EvidenceTable items={filteredEvidence} /> : <EvidenceCards items={filteredEvidence} />}
                   </>
                 ) : (
                   <div className="muted">No final output yet.</div>
-                )}
-              </div>
+                        )}
+                      </div>
             )}
 
             {activeTab === "plan" && (
               <div className="pane">
-                {output?.plan ? <PlanPanel plan={output.plan} /> : <div className="muted">No plan available.</div>}
-                {output?.final_critique ? <CritiquePanel critique={output.final_critique} /> : <div className="muted">No critique available.</div>}
+                <div className="plan-crit-grid">
+                  <div className="panel">
+                    <SectionHeader title="Plan" />
+                    {output?.plan ? <PlanPanel plan={output.plan} /> : <div className="muted">No plan available.</div>}
+                    </div>
+                  <div className="panel">
+                    <SectionHeader title="Critique" />
+                    {output?.final_critique ? <CritiquePanel critique={output.final_critique} /> : <div className="muted">No critique available.</div>}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {activeTab === "graph" && (
+              <div className="pane">
+                <SectionHeader title="Knowledge Graph (all papers)" />
+                <div className="filters">
+                  <div className="filter-group">
+                    <label>Disease scope</label>
+                    <select
+                      value={graphFilters.diseaseScope}
+                      onChange={(e) => setGraphFilters((s) => ({ ...s, diseaseScope: e.target.value }))}
+                    >
+                      <option value="MM_ONLY">Multiple Myeloma</option>
+                      <option value="ALL">All diseases</option>
+                    </select>
+                  </div>
+                  <div className="filter-group">
+                    <label>Evidence type</label>
+                    <select value={graphFilters.type} onChange={(e) => setGraphFilters((s) => ({ ...s, type: e.target.value }))}>
+                      <option value="ALL">All</option>
+                      {graphTypes.map((t) => (
+                        <option key={t} value={t}>
+                          {t}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="filter-group">
+                    <label>Direction</label>
+                    <select value={graphFilters.direction} onChange={(e) => setGraphFilters((s) => ({ ...s, direction: e.target.value }))}>
+                      <option value="ALL">All</option>
+                      {graphDirections.map((d) => (
+                        <option key={d} value={d}>
+                          {d}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="filter-group">
+                    <label>Search</label>
+                    <input
+                      type="text"
+                      value={graphFilters.search}
+                      onChange={(e) => setGraphFilters((s) => ({ ...s, search: e.target.value }))}
+                      placeholder="Filter nodes/evidence"
+                    />
+                  </div>
+                  <div className="filter-group">
+                    <label>Min weight</label>
+                    <input
+                      type="range"
+                      min="0"
+                      max="2"
+                      step="0.1"
+                      value={graphFilters.minWeight}
+                      onChange={(e) => setGraphFilters((s) => ({ ...s, minWeight: Number(e.target.value) }))}
+                    />
+                    <div className="muted tiny">{graphFilters.minWeight.toFixed(1)}</div>
+                  </div>
+                  <div className="pill muted small">{graphEvidence.length} evidence items</div>
+                </div>
+
+                {graphData.nodes.length ? (
+                  <div className="graph-grid">
+                    <div className="graph-box">
+                      <ForceGraph2D
+                        graphData={{
+                          nodes: graphData.nodes,
+                          links: graphData.links.filter((l) => l.weight >= graphFilters.minWeight),
+                        }}
+                        height={480}
+                        nodeLabel={(n) => `${n.label} (${n.kind}${n.paper ? ` · ${n.paper}` : ""})`}
+                        nodeAutoColorBy="kind"
+                        linkColor={(l) => l.color || "#94a3b8"}
+                        linkWidth={(l) => Math.max(1, (l.weight || 0.5) * 3)}
+                        onNodeClick={(node) => setGraphNode(node)}
+                      />
+                    </div>
+                    <div className="graph-side">
+                      <div className="card">
+                        <div className="card-title">Node details</div>
+                        {graphNode ? (
+                          <>
+                            <div className="muted small">Label: {graphNode.label}</div>
+                            <div className="muted small">Type: {graphNode.kind}</div>
+                            {graphNode.paper && <div className="muted small">Paper: {graphNode.paper}</div>}
+                            {graphNode.sig && <div className="muted small">Significance: {graphNode.sig}</div>}
+                            {graphNode.weight && (
+                              <div className="muted small">Weight: {graphNode.weight.toFixed?.(2) || graphNode.weight}</div>
+                            )}
+                  </>
+                ) : (
+                          <div className="muted small">Click a node to drill down.</div>
+                )}
+              </div>
+                      <div className="card">
+                        <div className="card-title">Related evidence</div>
+                        {graphDrillEvidence.length ? (
+                          <div className="drill-list">
+                            {graphDrillEvidence.slice(0, 50).map((ev) => (
+                              <div key={ev.__evidenceId} className="drill-item">
+                                <div className="muted tiny">{ev.__paperId}</div>
+                                <div className="muted small strong">{ev.feature_names?.join?.(", ") || "—"}</div>
+                                <div className="muted tiny">{ev.variant_names?.join?.(", ") || "—"}</div>
+                                <div className="muted tiny">{ev.therapy_names?.join?.(", ") || "—"}</div>
+                                <div className="pill-row">
+                                  <Pill>{ev.evidence_type || "—"}</Pill>
+                                  <Pill>{ev.evidence_direction || "—"}</Pill>
+            </div>
+                                <div className="muted tiny ellipsis" title={ev.verbatim_quote || ""}>
+                                  “{ev.verbatim_quote || "No quote"}”
+                                </div>
+                            {ev.source_page_numbers && (
+                              <div className="muted tiny">Pages: {ev.source_page_numbers}</div>
+                            )}
+                            {ev.cohort_size && <div className="muted tiny">Cohort: {ev.cohort_size}</div>}
+                            {ev.extraction_confidence && (
+                              <div className="muted tiny">
+                                Confidence:{" "}
+                                {typeof ev.extraction_confidence === "number"
+                                  ? `${Math.round(ev.extraction_confidence * 100)}%`
+                                  : ev.extraction_confidence}
+                              </div>
+                            )}
+                              </div>
+                            ))}
+                            {graphDrillEvidence.length > 50 && (
+                              <div className="muted tiny">Showing 50 of {graphDrillEvidence.length}</div>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="muted small">No related evidence.</div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="muted">
+                    Knowledge graph is empty. Ensure outputs are available on the API (http://localhost:4177) and reload.
+                  </div>
+                )}
               </div>
             )}
 
             {activeTab === "checkpoints" && (
-              <div className="panel">
+            <div className="panel">
                 <SectionHeader
                   title="Agent Checkpoints (01–04)"
                   right={
@@ -859,23 +1481,22 @@ function App() {
                             className="pill"
                             onClick={() => openJson(cp.name || `Checkpoint ${idx + 1}`, cp.data)}
                           >
-                            View {cp.name || `Checkpoint ${idx + 1}`}
+                            Raw {cp.name || `Checkpoint ${idx + 1}`}
                           </button>
                         ))}
-                      </div>
+              </div>
                     ) : null
                   }
                 />
-                <PhaseSummaries phases={phases} />
-                <PhaseDetails phases={phases} />
-              </div>
+                <CheckpointDeck phases={phases} pdfUrl={pdfUrl} onOpenRaw={(title, data) => openJson(title, data)} />
+            </div>
             )}
 
             {activeTab === "timeline" && (
-              <div className="panel">
+            <div className="panel">
                 <SectionHeader title="Timeline (tool calls & hooks)" />
-                <Timeline events={sessionEvents} />
-              </div>
+              <Timeline events={sessionEvents} />
+            </div>
             )}
           </div>
         )}

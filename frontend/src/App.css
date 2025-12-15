@@ -2,12 +2,14 @@
 
 :root {
   font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  background: #0b1220;
-  color: #e8edf5;
+  background: #f5f7fb;
+  color: #0f172a;
+  line-height: 1.4;
 }
 
 body {
   margin: 0;
+  background: #f5f7fb;
 }
 
 .layout {
@@ -17,8 +19,8 @@ body {
 }
 
 .sidebar {
-  background: #0f172a;
-  border-right: 1px solid #1f2b44;
+  background: #ffffff;
+  border-right: 1px solid #e3e8f0;
   padding: 16px;
 }
 
@@ -28,11 +30,20 @@ body {
   gap: 8px;
 }
 
+.section-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #475569;
+  margin: 12px 4px 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
 .paper-btn {
   width: 100%;
   text-align: left;
-  border: 1px solid #1f2b44;
-  background: #111a2f;
+  border: 1px solid #e3e8f0;
+  background: #fff;
   color: inherit;
   padding: 10px;
   border-radius: 8px;
@@ -40,8 +51,12 @@ body {
 }
 
 .paper-btn.active {
-  border-color: #3b82f6;
-  background: #122041;
+  border-color: #2563eb;
+  background: #eef2ff;
+}
+
+.paper-btn:hover {
+  border-color: #cbd5e1;
 }
 
 .paper-title {
@@ -51,7 +66,7 @@ body {
 
 .paper-meta {
   font-size: 12px;
-  color: #9fb2d0;
+  color: #566173;
 }
 
 .main {
@@ -75,14 +90,14 @@ body {
 }
 
 .muted {
-  color: #9fb2d0;
+  color: #566173;
 }
 
 .pill {
   padding: 6px 10px;
   border-radius: 999px;
-  background: #122041;
-  border: 1px solid #1f2b44;
+  background: #eef2ff;
+  border: 1px solid #d7def7;
 }
 
 .pill.error {
@@ -125,8 +140,8 @@ body {
 }
 
 .pane {
-  background: #0f172a;
-  border: 1px solid #1f2b44;
+  background: #fff;
+  border: 1px solid #e3e8f0;
   border-radius: 12px;
   padding: 12px;
   min-height: 400px;
@@ -135,13 +150,94 @@ body {
 .pdf-frame {
   width: 100%;
   height: 500px;
-  border: 1px solid #1f2b44;
+  border: 1px solid #e3e8f0;
   border-radius: 8px;
 }
 
+.pdf-embed {
+  width: 100%;
+  height: 900px;
+  border: 1px solid #e3e8f0;
+  border-radius: 8px;
+}
+
+.pdf-viewer {
+  background: #fff;
+  border: 1px solid #e3e8f0;
+  border-radius: 10px;
+  padding: 8px;
+}
+
+.pdf-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+
+.pdf-canvas {
+  display: flex;
+  justify-content: center;
+  border: 1px solid #e3e8f0;
+  border-radius: 8px;
+  padding: 8px;
+  background: #f8fafc;
+}
+
+.graph-grid {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 12px;
+}
+
+.graph-box {
+  border: 1px solid #e3e8f0;
+  border-radius: 10px;
+  background: #fff;
+  min-height: 520px;
+}
+
+.graph-side {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.drill-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 420px;
+  overflow: auto;
+}
+
+.drill-item {
+  border: 1px solid #e3e8f0;
+  border-radius: 8px;
+  padding: 8px;
+  background: #f8fafc;
+}
+
+.inline {
+  padding: 2px 8px;
+}
+
+.small {
+  font-size: 13px;
+}
+
+.tiny {
+  font-size: 12px;
+}
+
+.filters input[type="range"] {
+  width: 160px;
+}
+
 .panel {
-  background: #0f172a;
-  border: 1px solid #1f2b44;
+  background: #fff;
+  border: 1px solid #e3e8f0;
   border-radius: 12px;
   padding: 12px;
 }
@@ -198,8 +294,8 @@ body {
 }
 
 .card {
-  background: #111a2f;
-  border: 1px solid #1f2b44;
+  background: #fff;
+  border: 1px solid #e3e8f0;
   border-radius: 10px;
   padding: 10px;
 }
@@ -216,10 +312,10 @@ body {
   max-height: 260px;
   overflow: auto;
   font-size: 12px;
-  background: #0b1220;
+  background: #f8fafc;
   padding: 8px;
   border-radius: 6px;
-  border: 1px solid #1f2b44;
+  border: 1px solid #e3e8f0;
 }
 
 .table {
@@ -228,14 +324,91 @@ body {
   font-size: 13px;
 }
 
+.table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.table tbody tr:nth-child(odd) {
+  background: #f8fafc;
+}
+
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 12px;
+}
+
+.evidence-card .pill-row {
+  margin: 8px 0;
+}
+
+.evidence-card .kv {
+  display: flex;
+  gap: 8px;
+  font-size: 13px;
+  margin: 2px 0;
+}
+
+.label {
+  font-weight: 600;
+  color: #475569;
+  min-width: 90px;
+}
+
+.quote-block {
+  margin-top: 6px;
+  padding: 6px;
+  background: #f8fafc;
+  border-radius: 6px;
+  border: 1px solid #e3e8f0;
+}
+
+.strong {
+  font-weight: 600;
+}
+
+.deck-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 12px;
+}
+
+.view-toggle {
+  display: flex;
+  gap: 8px;
+  margin: 8px 0;
+}
+
+.view-toggle .active {
+  background: #2563eb;
+  color: #fff;
+  border-color: #2563eb;
+}
+
+.timeline-group {
+  margin-bottom: 12px;
+  border: 1px solid #e3e8f0;
+  border-radius: 10px;
+  background: #fff;
+}
+
+.timeline-group-header {
+  display: flex;
+  justify-content: space-between;
+  padding: 8px 10px;
+  border-bottom: 1px solid #e3e8f0;
+}
+
 .table th,
 .table td {
-  border: 1px solid #1f2b44;
+  border: 1px solid #e3e8f0;
   padding: 8px;
 }
 
 .table th {
-  background: #122041;
+  background: #eef2ff;
   text-align: left;
 }
 
@@ -283,10 +456,10 @@ body {
 }
 
 .timeline-item {
-  border: 1px solid #1f2b44;
+  border: 1px solid #e3e8f0;
   border-radius: 8px;
   padding: 8px;
-  background: #111a2f;
+  background: #fff;
 }
 
 .timeline-meta {
@@ -308,17 +481,17 @@ body {
 }
 
 .tab-btn {
-  border: 1px solid #1f2b44;
-  background: #111a2f;
-  color: #e8edf5;
+  border: 1px solid #e3e8f0;
+  background: #fff;
+  color: #0f172a;
   padding: 8px 12px;
   border-radius: 8px;
   cursor: pointer;
 }
 
 .tab-btn.active {
-  border-color: #3b82f6;
-  background: #122041;
+  border-color: #2563eb;
+  background: #eef2ff;
 }
 
 .filters {
@@ -339,9 +512,20 @@ body {
 .filter-group select {
   padding: 6px;
   border-radius: 6px;
-  border: 1px solid #1f2b44;
-  background: #0b1220;
-  color: #e8edf5;
+  border: 1px solid #e3e8f0;
+  background: #fff;
+  color: #0f172a;
+}
+
+.cp-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.cp-card .tiny {
+  font-size: 11px;
 }
 
 .tag-row {
