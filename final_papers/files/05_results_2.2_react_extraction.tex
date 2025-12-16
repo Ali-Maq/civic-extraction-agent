@@ -1,0 +1,113 @@
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% SECTION 5: RESULTS 2.2 - AUTOMATED VARIANT EXTRACTION WITH ReACT
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% 
+% INPUTS NEEDED: 
+%   - Precision/recall metrics by entity type
+%   - Processing speed
+%   - Validation statistics
+%
+% FIGURES: Figure 1 (figure1.png) - ReACT pipeline architecture
+% TABLES: None
+% DEPENDENCIES: Methods section, Supplementary Methods
+%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\subsection{Automated variant extraction with ReACT reasoning}\label{subsec2}
+
+%%% PARAGRAPH 1: Problem statement - manual curation bottleneck %%%
+Manual extraction of genomic variant information for clinical databases such as CIViC is a process that cannot scale with the exponential growth of oncology literature, which adds over 2.5 million biomedical articles annually\cite{bib16,bib17}. We first attempted to automate this process through single-prompt GPT-4 calls that generated free-text entity lists, followed by rule-based mapping to a CIViC JSON schema\cite{bib18}. We aimed to automatically extract the precise variant (HGVS plus gene), full molecular profile (class, origin, pathway impact), cancer context (subtype, stage), evidence type plus level plus clinical significance, associated therapies and response metrics, study design, cohort size, key statistics, guideline and regulatory status, quality star rating, reviewer confidence, and complete provenance in CIViC-ready JSON. However, preliminary validation revealed critical deficiencies including frequent omission of low-frequency variants, inconsistent evidence grading, and lack of transparent reasoning necessary for clinical validation.
+
+%%% PARAGRAPH 2: ReACT solution %%%
+We then redesigned the extraction pipeline around the Reason-Action-Conclude-Think (ReACT) paradigm using the DSPy framework\cite{bib19}. In ReACT, the model first reasons by mapping out what information it needs, then acts by pulling that information from the text, concludes by drafting an answer, and finally thinks by double-checking its work. Because each of these four steps is recorded, the workflow is transparent and auditable rather than a black box. We evaluated the ReACT pipeline on 1,300 oncology publications included in CIViC, using 70\% for training and 30\% for validation. The automatically curated, CIViC-compatible knowledge base produced by the OncoCITE pipeline is hereafter referred to as OncoCITE-KB.
+
+%%% PARAGRAPH 3: Performance results → REFERENCES FIGURE 1 %%%
+The evolution from our baseline extraction pipeline to the ReACT-enhanced system demonstrated significant improvements in accuracy and efficiency across all entity types, as shown in Fig.~\ref{fig1}. Variant-name extraction achieved 95.2\% precision and 93.8\% recall, while molecular-profile identification reached 94.0\% precision and 92.5\% recall. Evidence-type classification demonstrated 92.8\% precision with 90.2\% recall. Therapy extraction maintained 96.1\% precision and 94.5\% recall, with disease identification achieving 93.7\% precision and 91.8\% recall.
+
+%%% PARAGRAPH 4: Validation and processing statistics %%%
+The ReACT methodology's impact was evident in validation statistics, with 97.5\% of extractions including complete reasoning traces and 72.2\% achieving auto-validation status. The system processed approximately 2 PDFs per minute, representing a substantial improvement over traditional manual curation approaches. The transparent reasoning chains enabled auditing of extraction decisions, addressing the black-box limitations of conventional automated approaches.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% FIGURE 1 REQUIREMENTS (figure1.png):
+%
+% TITLE: "ReACT-integrated extraction pipeline architecture"
+%
+% MUST SHOW:
+%   - PDF input → PyPDF2 parsing
+%   - ReACT steps: Reason → Action → Conclude → Think
+%   - Output: CIViC-compatible evidence items
+%   - Provenance trails
+%
+% PERFORMANCE CALLOUTS TO INCLUDE:
+%   - 2 PDFs/min processing rate
+%   - 97.5% extraction accuracy
+%   - 1,300 items in dataset
+%   - 70/30 train/test split
+%
+% CAPTION TEXT:
+% "ReACT-integrated extraction pipeline architecture. The automated 
+% genomic variant extraction system from oncology literature using 
+% transparent reasoning chains. The pipeline processes PDF inputs 
+% through PyPDF2 parsing, applies ReACT-based reasoning (Reason, 
+% Action, Conclude, Think), and outputs CIViC-compatible evidence 
+% items with full provenance trails. Performance metrics show 
+% 2 PDFs/min processing rate, 97.5% extraction accuracy, 1,300 
+% items in dataset with 70/30 train/test split."
+%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% KEY METRICS IN THIS SECTION:
+%
+% Literature growth:
+%   □ 2.5 million biomedical articles annually
+%
+% Dataset:
+%   □ 1,300 oncology publications
+%   □ 70% training / 30% validation
+%
+% ENTITY-SPECIFIC PERFORMANCE:
+%   ┌─────────────────────┬───────────┬────────┐
+%   │ Entity Type         │ Precision │ Recall │
+%   ├─────────────────────┼───────────┼────────┤
+%   │ Variant extraction  │ 95.2%     │ 93.8%  │
+%   │ Molecular profile   │ 94.0%     │ 92.5%  │
+%   │ Evidence type       │ 92.8%     │ 90.2%  │
+%   │ Therapy extraction  │ 96.1%     │ 94.5%  │
+%   │ Disease ID          │ 93.7%     │ 91.8%  │
+%   └─────────────────────┴───────────┴────────┘
+%
+% Validation statistics:
+%   □ 97.5% complete reasoning traces
+%   □ 72.2% auto-validation status
+%
+% Processing speed:
+%   □ ~2 PDFs per minute
+%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% EXTRACTION TARGETS (what system extracts):
+%
+%   - Precise variant (HGVS + gene)
+%   - Full molecular profile (class, origin, pathway impact)
+%   - Cancer context (subtype, stage)
+%   - Evidence type + level + clinical significance
+%   - Associated therapies and response metrics
+%   - Study design
+%   - Cohort size
+%   - Key statistics
+%   - Guideline and regulatory status
+%   - Quality star rating
+%   - Reviewer confidence
+%   - Complete provenance
+%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% REFERENCES USED:
+%   [16] Siegel - Cancer statistics 2025
+%   [17] Cabral - Cancer research landscape
+%   [18] OpenAI - GPT-4 Technical Report
+%   [19] Khattab - DSPy framework
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%

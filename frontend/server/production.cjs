@@ -1,11 +1,4 @@
-/* Lightweight API bridge for the evidence viewer.
- * Endpoints:
- *  - GET /api/papers : list available papers (from data/papers and outputs)
- *  - GET /api/papers/:id/pdf : stream the PDF
- *  - GET /api/papers/:id/checkpoints : return checkpoint JSONs if present
- *  - GET /api/papers/:id/output : return final extraction JSON if present
- *  - POST /api/extract : upload or reference a PDF path and trigger run_extraction.py
- */
+/* Production server that serves both static files and API endpoints */
 const express = require("express");
 const cors = require("cors");
 const multer = require("multer");
@@ -31,6 +24,11 @@ const LOGS_ROOT = process.env.LOGS_ROOT || path.join(ROOT, "logs");
 const PYTHON = process.env.PYTHON_BIN || "python3.11";
 const EXTRACTION_SCRIPT =
   process.env.EXTRACTION_SCRIPT || path.join(ROOT, "scripts", "run_extraction.py");
+
+// Serve static files from dist directory
+const distPath = path.join(__dirname, "..", "dist");
+console.log(`Serving static files from: ${distPath}`);
+app.use(express.static(distPath));
 
 // Multer storage for uploads into a temp location before we move them
 const upload = multer({ dest: path.join(ROOT, "tmp_uploads") });
@@ -86,6 +84,7 @@ function resolvePdfPath(paperId) {
   return null;
 }
 
+// API Routes
 app.get("/api/papers", async (_req, res) => {
   try {
     const papers = await listPapers();
@@ -219,7 +218,15 @@ app.post("/api/extract", upload.single("file"), async (req, res) => {
   }
 });
 
+// Serve React app for all other routes (SPA fallback)
+app.use((req, res) => {
+  res.sendFile(path.join(distPath, "index.html"));
+});
+
 const PORT = process.env.PORT || 4177;
-app.listen(PORT, () => {
-  console.log(`API server running on http://localhost:${PORT}`);
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`Production server running on http://0.0.0.0:${PORT}`);
+  console.log(`Data root: ${DATA_ROOT}`);
+  console.log(`Outputs root: ${OUTPUTS_ROOT}`);
+  console.log(`Logs root: ${LOGS_ROOT}`);
 });

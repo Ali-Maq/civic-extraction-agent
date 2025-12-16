@@ -1,0 +1,21 @@
+version: '3.8'
+
+services:
+  civic-extraction:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8080:80"
+    volumes:
+      # Mount logs for easy access
+      - ./logs:/app/logs
+    environment:
+      - NODE_ENV=production
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/api/papers"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s

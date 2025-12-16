@@ -1,176 +1,209 @@
-# CIViC Evidence Extraction Agent
+# CIViC Evidence Extraction System
 
-A specialized multi-agent system for extracting clinical evidence from scientific literature, powered by the **Claude Agent SDK**.
-
-This system implements a **"Reader-First" Architecture** with **Agentic Normalization**, separating visual document understanding from clinical logic and ontology standardization to maximize accuracy and auditability.
+Multi-agent genomic evidence extraction pipeline with interactive web interface.
 
 ---
 
-## 🏗 System Architecture
-
-The extraction pipeline operates in three distinct phases:
-
-### Phase 1: The Reader (Visual Processing)
-**Goal:** Convert the raw PDF (images) into a structured "Single Source of Truth".
-
-*   **Agent:** `Reader` (Claude 3.5 Sonnet / Opus)
-*   **Strategy:** **Chunked Image Injection**. Images are sent in batches (2 pages/turn) to manage token limits and avoid pipe errors.
-*   **Input:** Full PDF rendered as high-resolution images.
-*   **Action:** Reads every page, analyzing text, tables, figures, and footnotes simultaneously.
-*   **Output:** A structured JSON object containing metadata, full text, structured tables, figure captions, and key statistics.
-*   **Checkpoint:** Saves to `01_reader_output.json`.
-
-### Phase 2: The Orchestrator (Clinical Logic)
-**Goal:** Extract and validate evidence items using the Reader's output.
-
-*   **Coordinator:** `Orchestrator` Agent
-*   **Context:** Works **exclusively** from the text/JSON extracted by the Reader (no image re-reading).
-*   **Sub-Agents:**
-    1.  **Planner:** Analyzes content to determine relevance and extraction strategy. Saves `02_planner_output.json`.
-    2.  **Extractor:** Identifies candidate evidence items with 8 required fields and **Reasoning Fields** (verbatim quotes, page numbers). Saves `03_extractor_output.json`.
-    3.  **Critic:** Validates every item against the text. Checks for hallucination and logic. Rejects items requiring revision.
-
-### Phase 3: Agentic Normalization
-**Goal:** Standardize entities to Global Ontologies (RxNorm, EFO, NCIt).
-
-*   **Agent:** `Normalizer` Agent
-*   **Method:** **Agentic Loop** (not just a script). The agent actively uses tools to lookup IDs, handles errors (typos, synonyms), and retries if needed.
-*   **Tools:** Granular lookups (`lookup_rxnorm`, `lookup_efo`, `lookup_gene_entrez`, `lookup_clinical_trial`, etc.).
-*   **Output:** Final standardized JSON with Tier 2 fields (IDs). Saves `04_normalization_output.json` and final `{paper_id}_extraction.json`.
-
----
-
-## 🌐 Beyond CIViC: Expanded Clinical Intelligence
-
-We have extended this system to support a comprehensive "Clinical Curation Assistant" role.
-
-*   **Capabilities:**
-    *   **✅ RxNorm:** Drug normalization and RXCUI resolution.
-    *   **✅ EFO:** Disease/Phenotype normalization.
-    *   **✅ FAERS:** Drug safety profiles (adverse events).
-    *   **✅ MyGene / MyVariant:** Gene and Variant normalization.
-    *   **✅ ClinicalTrials.gov:** Trial metadata enrichment.
-    *   **✅ NCIt:** NCI Thesaurus for therapies and factors.
-    *   **✅ ID Conversion:** PMCID resolution.
-
----
-
-## 📂 Project Structure
-
-```text
-civic_extraction/
-├── client.py               # MAIN ENTRANCE: Defines Client & All Agents (Reader, Planner, etc.)
-├── context/                # State Management
-│   ├── civic_context.py    # Global Context & Paper Loader
-│   └── state.py            # Data Classes (PaperInfo, EvidenceItem, ExtractionState)
-├── tools/                  # MCP Tool Implementations
-│   ├── normalization_tools.py # External API lookups (RxNorm, EFO, etc.)
-│   ├── extraction_tools.py # CRUD for evidence items & Checkpointing
-│   ├── paper_content_tools.py # Reader output storage
-│   └── validation_tools.py # Logic checks
-├── tool_registry.py        # Central MCP Server Builder
-├── schemas/                # Pydantic Models
-│   └── evidence_item.py    # Strict Schema for Output & Normalization
-├── scripts/
-│   └── run_extraction.py   # CLI Entry Point
-└── tests/                  # Verification Suite
-    ├── test_system_integrity.py # Zero-cost setup check
-    ├── test_normalizer_agent.py # Agentic normalization test
-    └── test_orchestrator_full.py # Full integration test
-```
-
----
-
-## 🚀 Usage
-
-### Prerequisites
-
-**Python Version:** This project requires **Python 3.11 or higher**. The `claude-agent-sdk` requires Python >=3.10, but we recommend 3.11 for compatibility.
+## Quick Start (Local Docker)
 
 ```bash
-# Check your Python version
-python3.11 --version  # Should show Python 3.11.x or higher
+# 1. Build and run
+docker compose up -d
+
+# 2. Visit
+http://localhost:8080
+
+# 3. Stop
+docker compose down
 ```
-
-### Setup
-
-1. **Create and activate a virtual environment:**
-
-```bash
-# Create venv with Python 3.11
-python3.11 -m venv .venv
-
-# Activate the environment
-source .venv/bin/activate  # On macOS/Linux
-# OR
-.venv\Scripts\activate  # On Windows
-```
-
-2. **Install dependencies:**
-
-```bash
-# Install from pyproject.toml
-pip install -e .
-
-# Or install core dependencies manually
-pip install claude-agent-sdk==0.1.14 PyMuPDF aiohttp pydantic python-dotenv
-```
-
-3. **Configuration (.env):**
-   Create a `.env` file in the project root directory with your API keys.
-   
-   ```bash
-   # .env example
-   ANTHROPIC_API_KEY=sk-ant-api03-...
-   # Optional settings
-   DEFAULT_MODEL=claude-3-5-sonnet-20241022
-   MAX_ITERATIONS=3
-   MAX_TURNS=50
-   ```
-
-### Running Extraction
-
-**Important:** The script expects a `paper_id` (not a full PDF path) and uses the `PAPERS_DIR` environment variable to locate PDFs.
-
-```bash
-# Set PAPERS_DIR to your papers directory
-export PAPERS_DIR=/path/to/your/papers/directory
-
-# Run extraction on a paper (using paper_id derived from PDF filename)
-python3.11 scripts/run_extraction.py <paper_id>
-
-# Example: If your PDF is at data/papers/Dutta_et_al-2024-Blood_Neoplasia.pdf
-export PAPERS_DIR=$(pwd)/data/papers
-python3.11 scripts/run_extraction.py Dutta_et_al-2024-Blood_Neoplasia
-```
-
-**Paper ID derivation & checkpoints:** 
-- The `paper_id` is derived from the PDF filename (without extension)
-- If the PDF is in a subfolder (e.g., `data/papers/s41591-023-02491-5/s41591-023-02491-5.pdf`), the `paper_id` is `s41591-023-02491-5`
-- Each run creates per-paper checkpoints under `outputs/checkpoints/<paper_id>/01-04_*.json`
-- Final results are saved to `outputs/<paper_id>_extraction.json`
-- The system supports **Smart Resume**: if a Reader checkpoint exists, it skips the expensive image reading phase
-
-**Context Normalization Fix:**
-The system now automatically normalizes legacy Reader output formats (where `sections` might be a string instead of a structured list). This ensures the full paper text is always available to downstream agents, preventing "abstract-only" extraction failures.
-
-### Outputs
-Results are saved to `civic_extraction/outputs/{paper_id}_extraction.json`.
 
 ---
 
-## 🧠 Learnings & Fixes (Recent Workflow)
+## AWS Deployment
 
-*   **Context Loss Fix (Critical):** Fixed a bug where the Reader's `sections` field (full paper text) was sometimes stored as a raw string instead of a structured list. The `_normalize_sections_data()` function now ensures sections are always in the correct format, preventing the Extractor from receiving only abstract content. This fix is applied both when saving new Reader output and when loading from checkpoints.
+**Current Live Instance:**
+- URL: http://13.217.205.13
+- Instance: i-0df08d1a01b9e8f62 (t4g.micro, us-east-1)
+- Status: ✅ Running
 
-*   **Content Filter Mitigation:** The Reader agent now uses a "Succinct Acknowledgment" strategy ("Received Part X") during image injection. This prevents the LLM from generating long summaries that might inadvertently trigger safety filters before the final extraction step.
+**Update Deployment:**
+```bash
+# 1. Build frontend
+cd frontend
+npm run build
 
-*   **Agentic Normalization:** We moved from a "batch tool" to a dedicated **Normalizer Agent**. This allows the LLM to "think" about failed lookups (e.g., trying "Vemurafenib" if "Zelboraf" fails) and retry, significantly improving ID coverage.
+# 2. Build Docker image
+cd ..
+docker build --platform linux/arm64 -t civic-extraction:latest .
 
-*   **Schema Hardening:** The `EvidenceItem` schema was updated to explicitly support normalized fields (`gene_id`, `disease_id`, `therapy_ids`) and their aliases, ensuring data isn't silently stripped during validation.
+# 3. Push to ECR
+aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin 114288741360.dkr.ecr.us-east-1.amazonaws.com
+docker tag civic-extraction:latest 114288741360.dkr.ecr.us-east-1.amazonaws.com/civic-extraction:latest
+docker push 114288741360.dkr.ecr.us-east-1.amazonaws.com/civic-extraction:latest
 
-*   **Checkpointing:** Essential for cost management. Checkpoints (`01`...`04`) allow restarting from any phase without re-spending tokens on previous steps. The system automatically normalizes legacy checkpoint formats to ensure compatibility.
+# 4. SSH to EC2 and restart
+ssh -i civic-extraction-key.pem ec2-user@13.217.205.13
+aws ecr get-login-password --region us-east-1 | sudo docker login --username AWS --password-stdin 114288741360.dkr.ecr.us-east-1.amazonaws.com
+sudo docker pull 114288741360.dkr.ecr.us-east-1.amazonaws.com/civic-extraction:latest
+sudo docker stop civic-extraction
+sudo docker rm civic-extraction
+sudo docker run -d --name civic-extraction -p 80:80 --restart unless-stopped -v /opt/civic-logs:/app/logs 114288741360.dkr.ecr.us-east-1.amazonaws.com/civic-extraction:latest
+```
 
-*   **SDK pinning:** The public `claude-agent-sdk` tops out at `0.1.14` (no 1.x on PyPI). We pin to that version in `pyproject.toml` to match the runtime.
+---
 
-*   **Python 3.11 Requirement:** The system requires Python 3.11+ due to SDK dependencies. Always use `python3.11` explicitly when running scripts.
+## System Architecture
+
+```
+Internet → AWS EC2 (13.217.205.13)
+              ↓
+          Docker Container
+              ├── Nginx (Port 80)
+              │   ├── Frontend (React + PDF.js)
+              │   └── Reverse Proxy → API
+              └── Express API (Port 4177)
+                  ├── /api/papers
+                  ├── /api/papers/:id/pdf
+                  └── /api/papers/:id/extractions
+```
+
+---
+
+## Project Structure
+
+```
+civic_extraction_end_to_end/
+├── Dockerfile                    # Docker image definition
+├── docker-compose.yml            # Local development
+├── deployment/
+│   ├── docker-entrypoint.sh      # Container startup
+│   └── nginx-docker.conf         # Web server config
+├── frontend/
+│   ├── dist/                     # Built frontend
+│   ├── server/production.cjs     # API server (Range requests)
+│   └── src/                      # React source code
+├── data/papers/                  # PDF files
+└── outputs/                      # Extraction results
+```
+
+---
+
+## Development
+
+### Frontend Development
+```bash
+cd frontend
+npm install
+npm run dev          # Dev server on localhost:5173
+npm run build        # Production build
+```
+
+### Backend API
+```bash
+cd frontend
+node server/production.cjs    # API on localhost:4177
+```
+
+### Docker Testing
+```bash
+# Build and run
+docker compose up -d
+
+# View logs
+docker compose logs -f
+
+# Restart
+docker compose restart
+
+# Stop and remove
+docker compose down
+```
+
+---
+
+## Troubleshooting
+
+### Local Docker Issues
+
+**Port already in use:**
+```bash
+lsof -i :8080
+docker compose down
+docker compose up -d
+```
+
+**Container not starting:**
+```bash
+docker compose logs
+docker ps -a
+```
+
+### AWS Deployment Issues
+
+**Check container status:**
+```bash
+ssh -i civic-extraction-key.pem ec2-user@13.217.205.13
+sudo docker ps
+sudo docker logs civic-extraction
+```
+
+**Restart container:**
+```bash
+sudo docker restart civic-extraction
+```
+
+**Test API locally on EC2:**
+```bash
+curl http://localhost/api/papers
+```
+
+---
+
+## Features
+
+- **Landing Page**: System overview with architecture diagrams
+- **Paper Explorer**: Browse 15 research papers
+- **PDF Viewer**: Built-in viewer with Range request support
+- **Evidence Extraction**: View extracted clinical evidence
+- **Knowledge Graph**: Interactive visualization
+- **Checkpoints**: Resume capability for all extraction phases
+
+---
+
+## Tech Stack
+
+- **Frontend**: React + Vite + PDF.js
+- **Backend**: Node.js + Express
+- **Web Server**: Nginx
+- **Container**: Docker
+- **Deployment**: AWS EC2 + ECR
+- **Architecture**: ARM64 (Apple Silicon compatible)
+
+---
+
+## Notes
+
+- **Firewall**: Corporate networks may block raw IPs. Access from personal network or use VPN.
+- **Cost**: Free tier eligible (t4g.micro). ~$5-7/month after 12 months.
+- **Data**: All PDFs and outputs included in Docker image.
+- **Logs**: Available in container at `/app/logs/api.log`
+
+---
+
+## Quick Commands
+
+```bash
+# Local
+docker compose up -d                                    # Start
+docker compose logs -f                                   # View logs
+docker compose down                                      # Stop
+
+# AWS
+ssh -i civic-extraction-key.pem ec2-user@13.217.205.13  # Connect
+sudo docker logs civic-extraction                        # View logs
+sudo docker restart civic-extraction                     # Restart
+```
+
+---
+
+**Live Application:** http://13.217.205.13

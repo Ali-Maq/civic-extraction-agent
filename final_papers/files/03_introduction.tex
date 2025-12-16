@@ -1,0 +1,91 @@
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% SECTION 3: INTRODUCTION
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% 
+% INPUTS NEEDED: 
+%   - Database statistics (OncoKB, CIViC growth)
+%   - Clinical workflow statistics
+%   - Sequencing cost data
+%
+% FIGURES: None
+% TABLES: Table 1 (referenced in paragraph 3)
+% DEPENDENCIES: References [1-17]
+%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\section{Introduction}\label{sec1}
+
+%%% PARAGRAPH 1: Precision oncology premise + database growth %%%
+The promise of precision oncology rests on a fundamental premise: therapeutic decisions should be guided by a comprehensive understanding of a tumor's molecular profile. Major genomic databases have expanded dramatically. The precision oncology knowledge base OncoKB has grown from 3,405 to well over 5,000 clinically relevant alterations across more than 680 genes since 2017\cite{bib1}. Likewise, the open-access CIViC database now catalogs over 3,200 distinct variants spanning more than 470 genes, with over 6,300 curated evidence items linking variants to therapy or prognosis\cite{bib2,bib3}. However, despite this remarkable growth in content, systematic barriers continue to limit the clinical utility of cancer genomic data.
+
+%%% PARAGRAPH 2: Clinical accessibility gaps %%%
+Current practice reveals a profound disconnect between available genomic knowledge and its routine application in patient care. Genetic counselors spend a significant portion of clinic time querying databases, and interpreting a single variant may take up to 30 minutes\cite{bib4,bib5}. Because of these time burdens and suboptimal informatics, most genomic findings do not actually inform clinical decisions. A recent study showed that clinicians viewed only approximately 1\% of genetic test results in the EHR, highlighting minimal engagement with unsolicited genomic data in practice\cite{bib6}. Moreover, when expert interpretation is provided, genotype-matched trial enrollment jumps from 11.8\% to 27.6\%\cite{bib7}. These gaps underscore the need for automated, clinician-friendly decision support.
+
+%%% PARAGRAPH 3: Database comparison overview → POINTS TO TABLE 1 %%%
+The current landscape of clinical genomic databases reflects both remarkable scientific achievement and fundamental accessibility failures. As detailed in Table~\ref{tab1}, five major resources---CIViC, OncoKB, COSMIC, ClinVar, and JAX-CKB---collectively demonstrate six key limitations that hinder clinical utility: (i)~rigid search requiring exact gene nomenclature; (ii)~heterogeneous schemas blocking cross-database queries; (iii)~divergent evidence-grading systems; (iv)~commercial paywalls; (v)~coverage gaps for rare variants; and (vi)~limited EHR integration hooks. Furthermore, no single database captures all actionable alterations, forcing users to consult multiple sources to obtain a complete picture. While CIViC\cite{bib2,bib3} and ClinVar\cite{bib8,bib9} provide full open access, OncoKB\cite{bib1}, COSMIC\cite{bib10}, and JAX-CKB\cite{bib11} impose commercial barriers that disadvantage institutions with limited resources.
+
+%%% PARAGRAPH 4: Evidence grading heterogeneity %%%
+Evidence-grading heterogeneity compounds these challenges, with OncoKB aligning to AMP/ASCO/CAP clinical standards, CIViC employing a unique dual system (A--E levels plus 1--5 star ratings), and ClinVar using ACMG/AMP frameworks\cite{bib12}, each requiring specialized training for consistent interpretation. This fragmentation forces clinicians to master multiple complex interfaces or rely on bioinformatics personnel who may be unavailable during critical decision points.
+
+%%% PARAGRAPH 5: Clinical impact statistics %%%
+The clinical impact is measurable and substantial. EHR-integrated genetic testing reduces ordering time from 8 to 2 minutes and result management from 5 to 1 minute\cite{bib13}, demonstrating significant potential efficiency gains. However, current implementations show diagnostic yields remain disappointingly low at 25--30\% partly due to database coverage gaps\cite{bib14}, while workflow studies reveal physicians spending 50\% of 10-hour shifts on EHR tasks without adequate genomic integration\cite{bib15}.
+
+%%% PARAGRAPH 6: Previous attempts %%%
+Previous attempts to address these challenges have yielded limited success. General-purpose clinical decision support or text-to-SQL models perform poorly on specialized medical schemas, while knowledge-graph approaches require extensive manual curation that cannot keep pace with the rapid expansion of genomic literature\cite{bib3}. While the technical barrier of sequencing cost has been reduced---from \$1,000 to \$600 per genome between 2020 and 2024---access to curated evidence remains a major bottleneck.
+
+%%% PARAGRAPH 7: OncoCITE introduction (3 contributions) %%%
+Here, we present OncoCITE, an auditable AI pipeline that extracts actionable evidence and molecular profiles from oncology literature to build a CIViC-compatible knowledge base and enables natural-language querying for clinician access. Users can ask a free-text question and receive a concise, citation-linked summary with the corresponding structured evidence item. Our contributions are threefold: (1)~a ReACT-based, multi-layer-validated extraction workflow that produces standards-compatible evidence with full provenance; (2)~a lightweight natural-language access layer to the curated knowledge base; and (3)~a knowledge-management component (canonicalization and multi-step reasoning) that improves robustness for real-world clinical phrasing.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% KEY STATISTICS IN THIS SECTION (verify these are current):
+%
+% Database growth:
+%   □ OncoKB: 3,405 → 5,000+ alterations, 680+ genes (since 2017)
+%   □ CIViC: 3,200+ variants, 470+ genes, 6,300+ evidence items
+%
+% Clinical workflow:
+%   □ 30 minutes per variant analysis
+%   □ 1% of genetic test results viewed in EHR
+%   □ 11.8% → 27.6% trial enrollment with expert interpretation
+%   □ 8→2 min ordering time, 5→1 min result management
+%   □ 25-30% diagnostic yield
+%   □ 50% of 10-hour shifts on EHR tasks
+%
+% Cost:
+%   □ $1,000 → $600 per genome (2020-2024)
+%
+% Six limitations enumerated:
+%   (i) rigid search requiring exact nomenclature
+%   (ii) heterogeneous schemas
+%   (iii) divergent evidence-grading
+%   (iv) commercial paywalls
+%   (v) coverage gaps for rare variants
+%   (vi) limited EHR integration
+%
+% Three contributions:
+%   (1) ReACT-based extraction with provenance
+%   (2) NL access layer
+%   (3) Knowledge management (canonicalization + reasoning)
+%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% REFERENCES USED IN THIS SECTION:
+%
+% [1]  Chakravarty - OncoKB 2017
+% [2]  Griffith - CIViC 2017
+% [3]  Krysiak - CIViC 2022
+% [4]  McPherson - Clinical genetics workflow
+% [5]  Chin - Clinical Variant Analysis Tool
+% [6]  Nestor - EHR log analysis
+% [7]  Johnson - Precision Oncology Decision Support
+% [8]  Landrum - ClinVar 2016
+% [9]  Rehm - ClinVar critical resource
+% [10] Sondka - COSMIC
+% [11] Patterson - JAX-CKB
+% [12] Landrum - ClinVar updates 2025
+% [13] Lau-Min - EHR integration impact
+% [14] Pagnamenta - Diagnostic yield
+% [15] Hill - 4000 clicks EHR study
+%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%

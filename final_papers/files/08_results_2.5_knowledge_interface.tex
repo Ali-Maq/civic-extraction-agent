@@ -1,0 +1,125 @@
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% SECTION 8: RESULTS 2.5 - KNOWLEDGE-ENHANCED CLINICAL INTERFACE
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% 
+% INPUTS NEEDED: 
+%   - Five component descriptions
+%   - Entity canonicalization examples
+%   - Performance improvement metrics
+%   - Latency data
+%
+% FIGURES: Figure 3 (figure3.png) - Knowledge-enhanced interface
+% TABLES: None
+% DEPENDENCIES: 
+%   - Supplementary Figure S3 (canonicalization examples)
+%   - Methods section
+%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\subsection{Knowledge-enhanced clinical interface evaluation}\label{subsec5}
+
+%%% PARAGRAPH 1: Five-component interface description %%%
+Finally, to make OncoCITE broadly useful in real-world clinical settings, we designed a knowledge-enhanced clinical interface, which consists of five integrated components: (1)~a Knowledge Management System maintaining comprehensive dictionaries mapping diverse clinical terminology to canonical database terms; (2)~a Multi-Step Reasoning Pipeline implementing iterative query refinement rather than single-shot translation; (3)~an Enhanced Database Manager providing active query optimization and detailed failure analysis; (4)~an Interactive Interface enabling collaborative dialogues with progressive query refinement; and (5)~a Transparency Layer maintaining detailed decision logs for audit requirements.
+
+%%% PARAGRAPH 2: Evaluation methodology → REFERENCES FIGURE 3 %%%
+The knowledge-enhanced interface was evaluated using simulated clinical scenarios through the OpenAI agents framework with GPT-4.1 assessment. Testing revealed the necessity for robust handling of real-world linguistic variations in medical terminology, such as gene alternate names or synonyms. The knowledge-enhanced interface addressed queries that failed due to colloquial disease names, drug brand names, or gene aliases not recognized by baseline systems as shown in Fig.~\ref{fig3}.
+
+%%% PARAGRAPH 3: Entity canonicalization capabilities %%%
+Entity canonicalization enabled recognition of clinical synonyms, including historical gene nomenclature such as HER1 for EGFR and variant notation standardization across different clinical reporting systems. Representative examples of terminology canonicalization across gene, disease, and drug categories are shown in Supplementary Fig.~S3.
+
+%%% PARAGRAPH 4: Multi-step reasoning and error recovery %%%
+The multi-step reasoning approach transformed error handling from categorical rejection to adaptive collaboration. When initial queries returned empty results, the system recovered through constraint relaxation or semantic terminology substitution. Despite additional processing logic, latency remained acceptable, with per-entity canonicalization averaging under ten milliseconds.
+
+%%% PARAGRAPH 5: Performance results %%%
+Performance evaluation using simulated clinical scenarios demonstrated substantial improvements in clinical workflow utility, though prospective clinical validation remains necessary to confirm real-world efficacy. Overall query success rates improved from 76\% to 92\% in the test scenarios. Queries containing non-standard terminology showed dramatic enhancement from 40\% to 90\% success rates using the knowledge management system. The system successfully addressed the schema misalignment errors that characterized baseline performance, enabling successful processing of previously failing simulated clinical queries.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% FIGURE 3 REQUIREMENTS (figure3.png):
+%
+% TITLE: "Knowledge-enhanced clinical interface architecture"
+%
+% MUST SHOW:
+%   - Query processing workflow
+%   - Entity canonicalization module
+%   - Multi-step reasoning pipeline
+%   - Error recovery mechanisms
+%   - Five components labeled
+%
+% PERFORMANCE CALLOUTS TO INCLUDE:
+%   - 76% → 92% overall success
+%   - 40% → 90% synonym/misspelling queries
+%   - 80% error recovery success rate
+%
+% CAPTION TEXT:
+% "Knowledge-enhanced clinical interface architecture. OncoCITE's 
+% intelligent query processing workflow with entity canonicalization 
+% and multi-step reasoning. The system improves overall query success 
+% from 76% to 92% and synonym/misspelling queries from 40% to 90%. 
+% The error recovery module achieves 80% success through constraint 
+% relaxation, synonym substitution, intent reinterpretation, and 
+% query decomposition."
+%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% KEY DATA IN THIS SECTION:
+%
+% FIVE COMPONENTS:
+%   1. Knowledge Management System
+%      - Comprehensive dictionaries
+%      - Maps clinical terminology → canonical terms
+%
+%   2. Multi-Step Reasoning Pipeline
+%      - Iterative query refinement
+%      - Not single-shot translation
+%
+%   3. Enhanced Database Manager
+%      - Active query optimization
+%      - Detailed failure analysis
+%
+%   4. Interactive Interface
+%      - Collaborative dialogues
+%      - Progressive query refinement
+%
+%   5. Transparency Layer
+%      - Detailed decision logs
+%      - Audit requirements compliance
+%
+% PERFORMANCE METRICS:
+%   □ Overall success: 76% → 92%
+%   □ Synonym/misspelling queries: 40% → 90%
+%   □ Per-entity canonicalization latency: <10ms
+%
+% ERROR RECOVERY STRATEGIES:
+%   - Constraint relaxation
+%   - Semantic terminology substitution
+%   - Intent reinterpretation
+%   - Query decomposition
+%
+% CANONICALIZATION EXAMPLES:
+%   □ Gene: HER1 → EGFR
+%   □ Variant notation standardization across systems
+%   □ More examples in Supplementary Fig. S3
+%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% SUPPLEMENTARY MATERIALS REFERENCED:
+%
+% → Supplementary Figure S3: Clinical terminology canonicalization
+%   Shows: Gene aliases, disease synonyms, drug nomenclature examples
+%   Examples: HER2/ERBB2, breast cancer/mammary carcinoma,
+%             trastuzumab/Herceptin
+%
+% → Supplementary Figure S2: Multi-step reasoning flowchart
+%   Shows: Iterative query refinement and error recovery
+%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% CAVEAT NOTED:
+% "prospective clinical validation remains necessary to confirm 
+% real-world efficacy"
+%
+% This is important disclaimer - results are from simulated scenarios
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%

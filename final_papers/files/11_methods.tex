@@ -1,0 +1,151 @@
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% SECTION 11: METHODS (Online Methods)
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% 
+% INPUTS NEEDED: 
+%   - Technical implementation details
+%   - Framework/library versions
+%   - Training procedures summary
+%
+% FIGURES: None
+% TABLES: None
+% DEPENDENCIES: 
+%   - Results sections (must align)
+%   - Supplementary Methods (detailed version)
+%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\section*{Methods}\label{sec:methods}
+
+%%=============================================================%%
+%% METHOD 1: Automated variant-evidence extraction
+%%=============================================================%%
+
+\subsection*{Automated variant--evidence extraction}
+
+We built literature curation around the Reason--Action--Conclude--Think (ReACT) paradigm in DSPy. PDFs are parsed with PyPDF2 (with omniOCR fallback for scanned/image-heavy files). A GPT-4.1 Curation Agent executes explicit reasoning chains (DSPy ChainOfThought, Predict, ReAct for tool calls) against a formal DSPy signature that maps full-text input to CIViC-compatible evidence items. A Validation Engine enforces four layers: (i)~schema checks via Pydantic; (ii)~field checks for HGVS, PMID, and NCT patterns; (iii)~cross-entity integrity between evidence and variant records; and (iv)~clinical-logic consistency between study design, evidence level, and therapeutic relationships. A composite confidence score (evidence strength, completeness, and extraction fidelity) routes low-confidence items to human review. The asynchronous Python implementation preserves full reasoning traces and adheres to HGVS/HGNC/ClinicalTrials.gov standards, with FAIR and HL7 FHIR-genomics compatibility.
+
+%%=============================================================%%
+%% METHOD 2: Natural-language-to-SQL query system
+%%=============================================================%%
+
+\subsection*{Natural-language-to-SQL query system}
+
+To remove the SQL barrier, we generated 21,000 natural-language question--SQL pairs across four complexity tiers using templated prompts populated with real CIViC entities. Each SQL target passed multi-stage validation (syntax, schema, executability). We fine-tuned Llama-3 3B with LoRA adapters (parameter-efficient training on Fireworks AI) to translate questions into execution-ready SQL over the curated OncoCITE-KB. Training details are provided in Supplementary Methods.
+
+%%=============================================================%%
+%% METHOD 3: Knowledge-enhanced clinical interface
+%%=============================================================%%
+
+\subsection*{Knowledge-enhanced clinical interface}
+
+We added a five-component interface: a Knowledge Management System that canonicalizes gene aliases, variant notations, disease terms, and therapy names; a Multi-Step Reasoning Pipeline that reformulates failed or under-specified queries (constraint relaxation, synonym substitution, intent reinterpretation, and query decomposition); an Enhanced Database Manager for optimization and failure analysis; an Interactive Dialogue layer for collaborative refinement; and a Transparency Layer that logs all decisions. A Clinical Interpretation Engine converts query results into hierarchical, guideline-aligned summaries (context, key findings, clinical relevance, next steps). Phase-3 behavior was assessed in simulated clinical scenarios with standardized rubrics.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% METHODS BREAKDOWN:
+%
+% METHOD 1: AUTOMATED EXTRACTION
+%
+% Framework: DSPy + ReACT paradigm
+% PDF parsing: PyPDF2 (omniOCR fallback)
+% LLM: GPT-4.1 Curation Agent
+%
+% DSPy modules used:
+%   - ChainOfThought
+%   - Predict
+%   - ReAct (for tool calls)
+%
+% Four-layer validation:
+%   (i)   Schema checks (Pydantic)
+%   (ii)  Field checks (HGVS, PMID, NCT patterns)
+%   (iii) Cross-entity integrity
+%   (iv)  Clinical-logic consistency
+%
+% Confidence scoring:
+%   - Evidence strength
+%   - Completeness
+%   - Extraction fidelity
+%   → Routes low-confidence to human review
+%
+% Standards compliance:
+%   - HGVS
+%   - HGNC
+%   - ClinicalTrials.gov
+%   - FAIR
+%   - HL7 FHIR-genomics
+%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% METHOD 2: NL-TO-SQL
+%
+% Training data:
+%   - 21,000 Q-SQL pairs
+%   - Four complexity tiers
+%   - Templated prompts + real CIViC entities
+%
+% Validation stages:
+%   - Syntax
+%   - Schema
+%   - Executability
+%
+% Model:
+%   - Llama-3 3B
+%   - LoRA adapters
+%   - Fireworks AI platform
+%
+% → Detailed hyperparameters in Supplementary Methods
+%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% METHOD 3: KNOWLEDGE-ENHANCED INTERFACE
+%
+% Five components:
+%   1. Knowledge Management System
+%      - Gene aliases
+%      - Variant notations
+%      - Disease terms
+%      - Therapy names
+%
+%   2. Multi-Step Reasoning Pipeline
+%      - Constraint relaxation
+%      - Synonym substitution
+%      - Intent reinterpretation
+%      - Query decomposition
+%
+%   3. Enhanced Database Manager
+%      - Query optimization
+%      - Failure analysis
+%
+%   4. Interactive Dialogue Layer
+%      - Collaborative refinement
+%
+%   5. Transparency Layer
+%      - Decision logging
+%
+% Clinical Interpretation Engine outputs:
+%   - Context summary
+%   - Key findings
+%   - Clinical relevance
+%   - Next steps
+%
+% Evaluation:
+%   - Simulated clinical scenarios
+%   - Standardized rubrics
+%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% CROSS-REFERENCE WITH SUPPLEMENTARY METHODS:
+%
+% Detailed content in Supplementary Methods includes:
+%   □ DSPy module configurations
+%   □ LoRA hyperparameters (rank=8, alpha=16, dropout=0.05)
+%   □ Optimizer settings (AdamW, lr=2e-5, batch=16)
+%   □ Training platform (A100 GPUs)
+%   □ Dictionary sizes and sources
+%   □ Trie data structure implementation
+%   □ Fuzzy matching algorithms
+%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%

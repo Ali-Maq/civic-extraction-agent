@@ -1,9 +1,68 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, Component } from "react";
 import ForceGraph2D from "react-force-graph-2d";
+import { Document, Page, pdfjs } from "react-pdf";
+import "react-pdf/dist/Page/AnnotationLayer.css";
+import "react-pdf/dist/Page/TextLayer.css";
 import "./App.css";
+import {
+  normalizeEvidenceItems,
+  getSignificanceColor,
+  getNodeColor,
+  calculateEvidenceWeight
+} from "./utils/normalize";
+import { ResearchContext, TierFieldExplainer, TraceabilityBadge } from "./ResearchContext";
+import { buildKnowledgeGraphs } from "./knowledgeGraph";
+import { ClinicalMapView, MatrixView } from "./KnowledgeGraphViews";
+import LandingPage from "./LandingPage";
 
-// Default to API on 4177 unless overridden.
-const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:4177";
+// Error Boundary Component
+class ErrorBoundary extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null, errorInfo: null };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error, errorInfo) {
+    console.error("Error caught by boundary:", error, errorInfo);
+    this.setState({ error, errorInfo });
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{ padding: "20px", background: "#fee", border: "2px solid #f00", margin: "20px" }}>
+          <h2>Something went wrong!</h2>
+          <details style={{ whiteSpace: "pre-wrap" }}>
+            <summary>Error Details</summary>
+            {this.state.error && this.state.error.toString()}
+            <br />
+            {this.state.errorInfo && this.state.errorInfo.componentStack}
+          </details>
+          <button onClick={() => window.location.reload()}>Reload Page</button>
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
+}
+
+// Configure PDF.js worker the Vite way - let Vite resolve the worker from pdfjs-dist
+// This is more reliable than serving from /public
+pdfjs.GlobalWorkerOptions.workerSrc = new URL(
+  'pdfjs-dist/build/pdf.worker.min.mjs',
+  import.meta.url
+).toString();
+console.log("[PDF] Worker configured:", pdfjs.GlobalWorkerOptions.workerSrc);
+console.log("[PDF] pdfjs version:", pdfjs.version);
+
+// Use relative URLs for API calls (works with Nginx proxy in production)
+// In dev, Vite proxy will forward to localhost:4177
+const API_BASE = import.meta.env.VITE_API_BASE || "";
 async function fetchJson(url) {
   const res = await fetch(url);
   if (!res.ok) throw new Error(`Request failed: ${res.status}`);
@@ -29,7 +88,7 @@ function parseTrials(nctRaw) {
     });
 }
 
-const Pill = ({ children, kind = "default" }) => (
+export const Pill = ({ children, kind = "default" }) => (
   <span className={`pill ${kind}`}>{children}</span>
 );
 
@@ -45,120 +104,75 @@ function EvidenceTable({ items }) {
     return <div className="muted">No evidence items found.</div>;
   }
 
-  const cols = [
-    { key: "feature_names", label: "Feature" },
-    { key: "variant_names", label: "Variant" },
-    { key: "variant_origin", label: "Origin" },
-    { key: "disease_name", label: "Disease" },
-    { key: "therapy_names", label: "Therapy" },
-    { key: "therapy_ncit_ids", label: "Therapy NCIt" },
-    { key: "therapy_rxcui_ids", label: "RxCUI" },
-    { key: "evidence_type", label: "Type" },
-    { key: "evidence_level", label: "Level" },
-    { key: "evidence_direction", label: "Direction" },
-    { key: "evidence_significance", label: "Significance" },
-    { key: "clinical_trial_nct_ids", label: "NCT IDs" },
-    { key: "chromosome", label: "Chr" },
-    { key: "reference_build", label: "Build" },
-    { key: "start_position", label: "Start" },
-    { key: "stop_position", label: "Stop" },
-    { key: "variant_hgvs_descriptions", label: "HGVS" },
-    { key: "cancer_cell_fraction", label: "CCF" },
-    { key: "cohort_size", label: "Cohort" },
-    { key: "source_title", label: "Source Title", tooltip: true },
-    { key: "source_publication_year", label: "Year" },
-    { key: "source_journal", label: "Journal", tooltip: true },
-    { key: "source_page_numbers", label: "Pages" },
-    { key: "verbatim_quote", label: "Quote", tooltip: true },
-    { key: "extraction_confidence", label: "Confidence" },
-    { key: "extraction_reasoning", label: "Reasoning", tooltip: true },
-  ];
-
-  const normalizeRow = (item) => {
-    const ncitList = Array.isArray(item.therapies)
-      ? item.therapies.map((t) => t.ncit_id).filter(Boolean)
-      : [];
-    const rxcuiList = Array.isArray(item.therapies)
-      ? item.therapies.map((t) => t.rxcui).filter(Boolean)
-      : [];
-    const safetyList = Array.isArray(item.therapies)
-      ? item.therapies
-          .map((t) => {
-            if (t?.safety_profile?.top_adverse_events?.length) {
-              const top = t.safety_profile.top_adverse_events
-                .slice(0, 3)
-                .map((ae) => `${ae.term} (${ae.count})`)
-                .join(", ");
-              return `${t.name}: ${top}`;
-            }
-            return null;
-          })
-          .filter(Boolean)
-      : [];
-    const clinicalTrials =
-      item.clinical_trial_nct_ids ||
-      (Array.isArray(item.therapies)
-        ? item.therapies.flatMap((t) => t.clinical_trial_ids || [])
-        : []);
-    return {
-      ...item,
-      therapy_ncit_ids: ncitList.length ? ncitList.join(", ") : "—",
-      therapy_rxcui_ids: rxcuiList.length ? rxcuiList.join(", ") : "—",
-      extraction_confidence:
-        typeof item.extraction_confidence === "number"
-          ? `${Math.round(item.extraction_confidence * 100)}%`
-          : item.extraction_confidence || "—",
-      extraction_reasoning: item.extraction_reasoning || "—",
-      safety_profiles: safetyList.length ? safetyList.join(" | ") : "—",
-      clinical_trial_nct_ids: clinicalTrials && clinicalTrials.length ? clinicalTrials.join(", ") : "—",
-      start_position: item.start_position ?? "—",
-      stop_position: item.stop_position ?? "—",
-      reference_build: item.reference_build || "—",
-      variant_origin: item.variant_origin || "—",
-      cancer_cell_fraction:
-        typeof item.cancer_cell_fraction === "number"
-          ? item.cancer_cell_fraction
-          : item.cancer_cell_fraction || "—",
-      source_publication_year: item.source_publication_year || "—",
-      source_journal: item.source_journal || "—",
-      source_page_numbers: item.source_page_numbers || "—",
-      variant_hgvs_descriptions: item.variant_hgvs_descriptions || item.variant_hgvs || [],
-    };
-  };
-
   return (
-    <div className="table-wrapper">
-    <table className="table">
-      <thead>
-        <tr>
-          {cols.map((c) => (
-            <th key={c.key}>{c.label}</th>
-          ))}
-        </tr>
-      </thead>
-      <tbody>
-          {items.map((raw, idx) => {
-          const item = normalizeRow(raw);
-          return (
-            <tr key={idx}>
-              {cols.map((c) => (
-                <td
-                  key={c.key}
-                  className={c.tooltip ? "ellipsis" : ""}
-                    title={c.tooltip ? (Array.isArray(item[c.key]) ? item[c.key].join(", ") : item[c.key] || "") : undefined}
-                >
-                  {Array.isArray(item[c.key])
-                      ? item[c.key].length
-                    ? item[c.key].join(", ")
-                        : "—"
-                    : item[c.key] || "—"}
-                </td>
-              ))}
-            </tr>
-          );
-        })}
-      </tbody>
-    </table>
+    <div className="evidence-grid">
+      {items.map((item, idx) => (
+        <div key={idx} className="evidence-item">
+          <div className="evidence-header">
+            <div className="evidence-main">
+              <span className="gene-badge">{(item.feature_names || []).join(", ") || "—"}</span>
+              <span className="variant-badge">{(item.variant_names || []).join(", ") || "—"}</span>
+              {item.therapy_names && item.therapy_names.length > 0 && (
+                <span className="therapy-badge">{item.therapy_names.join(", ")}</span>
+              )}
+            </div>
+            <div className="evidence-tags">
+              <Pill kind={item.evidence_direction === "SUPPORTS" ? "success" : "warning"}>
+                {item.evidence_type || "—"} • Level {item.evidence_level || "—"}
+              </Pill>
+              {item.evidence_significance && (
+                <Pill kind={
+                  item.evidence_significance.includes("SENSITIVITY") || item.evidence_significance.includes("BETTER")
+                    ? "success"
+                    : item.evidence_significance.includes("RESISTANCE") || item.evidence_significance.includes("POOR")
+                    ? "error"
+                    : "default"
+                }>
+                  {item.evidence_significance}
+                </Pill>
+              )}
+            </div>
+          </div>
+
+          <div className="evidence-body">
+            <div className="evidence-row">
+              <div className="evidence-col">
+                <span className="label-sm">Disease</span>
+                <span className="value-sm">{item.disease_name || "—"}</span>
+              </div>
+              {item.cohort_size && (
+                <div className="evidence-col">
+                  <span className="label-sm">Cohort</span>
+                  <span className="value-sm">{item.cohort_size} patients</span>
+                </div>
+              )}
+              {item.extraction_confidence && (
+                <div className="evidence-col">
+                  <span className="label-sm">Confidence</span>
+                  <span className="value-sm">
+                    {typeof item.extraction_confidence === "number"
+                      ? `${Math.round(item.extraction_confidence * 100)}%`
+                      : item.extraction_confidence}
+                  </span>
+                </div>
+              )}
+              {item.source_page_numbers && (
+                <div className="evidence-col">
+                  <span className="label-sm">Pages</span>
+                  <span className="value-sm">{item.source_page_numbers}</span>
+                </div>
+              )}
+            </div>
+
+            {item.verbatim_quote && (
+              <div className="evidence-quote">
+                <span className="quote-icon">💬</span>
+                <span className="quote-text">"{item.verbatim_quote}"</span>
+              </div>
+            )}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
@@ -167,15 +181,60 @@ function PdfViewer({ url, onError }) {
   const [numPages, setNumPages] = useState(null);
   const [page, setPage] = useState(1);
   const [error, setError] = useState("");
+  const [scale, setScale] = useState(1.0);
+  const [workerReady, setWorkerReady] = useState(false);
+
+  // Ensure worker is initialized before rendering Document
+  useEffect(() => {
+    console.log("[PdfViewer] Component mounted, checking worker...");
+    console.log("[PdfViewer] URL:", url);
+
+    const checkWorker = async () => {
+      try {
+        // Verify worker is configured
+        if (!pdfjs.GlobalWorkerOptions.workerSrc) {
+          console.error("[PDF] Worker not configured!");
+          setError("PDF worker not configured");
+          return;
+        }
+
+        console.log("[PDF] Worker ready:", pdfjs.GlobalWorkerOptions.workerSrc);
+        console.log("[PDF] pdfjs version:", pdfjs.version);
+        setWorkerReady(true);
+      } catch (err) {
+        console.error("[PDF] Worker initialization error:", err);
+        setError("Failed to initialize PDF worker");
+      }
+    };
+
+    // Small delay to ensure worker script is loaded
+    const timer = setTimeout(checkWorker, 100);
+    return () => clearTimeout(timer);
+  }, [url]);
 
   if (!url) return <div className="muted">PDF not available.</div>;
+  if (!workerReady) return <div className="muted">Initializing PDF viewer...</div>;
   if (error) {
     if (onError) onError(error);
-    return <div className="muted">PDF error: {error}</div>;
+    return (
+      <div style={{ padding: "20px", background: "#fee", border: "1px solid #f00", borderRadius: "8px" }}>
+        <p><strong>PDF Error:</strong> {error}</p>
+        <p className="small">The PDF viewer encountered an error. You can:</p>
+        <ul className="small">
+          <li>Try opening the PDF in a new tab using the link below</li>
+          <li>Check browser console for detailed error messages</li>
+        </ul>
+        <a className="pill link-pill" href={url} target="_blank" rel="noreferrer" style={{ marginTop: "8px", display: "inline-block" }}>
+          Open PDF in new tab
+        </a>
+      </div>
+    );
   }
 
   const next = () => setPage((p) => Math.min((numPages || p), p + 1));
   const prev = () => setPage((p) => Math.max(1, p - 1));
+  const zoomIn = () => setScale((s) => Math.min(s + 0.2, 2.0));
+  const zoomOut = () => setScale((s) => Math.max(s - 0.2, 0.5));
 
   return (
     <div className="pdf-viewer">
@@ -189,27 +248,60 @@ function PdfViewer({ url, onError }) {
         <button className="pill" onClick={next} disabled={numPages ? page >= numPages : false}>
           Next ▶
         </button>
+        <button className="pill" onClick={zoomOut} disabled={scale <= 0.5}>
+          Zoom -
+        </button>
+        <span className="muted small">{Math.round(scale * 100)}%</span>
+        <button className="pill" onClick={zoomIn} disabled={scale >= 2.0}>
+          Zoom +
+        </button>
         <a className="pill link-pill" href={url} target="_blank" rel="noreferrer">
-          Download
+          Open in new tab
         </a>
       </div>
       <div className="pdf-canvas">
-        <Document
-          file={{ url, httpHeaders: { Accept: "application/pdf" }, withCredentials: false }}
-          onLoadSuccess={({ numPages: n }) => {
-            setNumPages(n);
-            setError("");
-          }}
-          onLoadError={(err) => setError(err?.message || "Failed to load PDF")}
-        >
-          <Page pageNumber={page} width={800} renderAnnotationLayer={false} renderTextLayer={false} />
-        </Document>
+        <ErrorBoundary key={url}>
+          <Document
+            key={url}
+            file={{ url, httpHeaders: { Accept: "application/pdf" }, withCredentials: false }}
+            onLoadSuccess={({ numPages: n }) => {
+              console.log("[PDF] Loaded successfully, pages:", n);
+              setNumPages(n);
+              setError("");
+            }}
+            onLoadError={(err) => {
+              console.error("[PDF] Load error:", err);
+              setError(err?.message || "Failed to load PDF");
+            }}
+            loading={<div className="muted">Loading PDF...</div>}
+            error={
+              <div className="muted" style={{ padding: "20px", background: "#fee", border: "1px solid #f00" }}>
+                <p>Failed to load PDF</p>
+                <p className="small">The PDF worker may not be initialized correctly.</p>
+                <p className="small">Try opening the PDF in a new tab using the button above.</p>
+              </div>
+            }
+          >
+            <Page
+              pageNumber={page}
+              scale={scale}
+              renderAnnotationLayer={false}
+              renderTextLayer={false}
+              onLoadError={(err) => {
+                console.error("[PDF] Page load error:", err);
+                setError("Failed to render PDF page. Try opening in a new tab.");
+              }}
+              onRenderError={(err) => {
+                console.error("[PDF] Page render error:", err);
+                setError("Failed to render PDF page. Try opening in a new tab.");
+              }}
+            />
+          </Document>
+        </ErrorBoundary>
       </div>
     </div>
   );
 }
-
-// Removed PdfViewer (react-pdf). Using iframe/embed fallback only.
 
 function EvidenceCards({ items }) {
   if (!items?.length) return <div className="muted">No evidence items found.</div>;
@@ -359,9 +451,9 @@ function TagList({ items, hrefBuilder, title }) {
         >
           {it}
         </a>
-      ))}
+        ))}
     </div>
-  );
+    );
 }
 
 function PlanPanel({ plan }) {
@@ -426,7 +518,9 @@ function CritiquePanel({ critique }) {
   );
 }
 
-function StatsGrid({ evidence }) {
+function StatsGrid({ evidence, defaultCollapsed = false }) {
+  const [collapsed, setCollapsed] = useState(defaultCollapsed);
+
   if (!evidence?.length) return null;
 
   const geneCounts = {};
@@ -450,59 +544,99 @@ function StatsGrid({ evidence }) {
       .slice(0, n);
 
   return (
-    <div className="stats-grid">
-      <div className="card">
-        <div className="card-title">Top genes</div>
-        <div className="tag-row">
-          {top(geneCounts).map(([g, c]) => (
-            <span key={g} className="pill">
-              {g} · {c}
-            </span>
-          ))}
+    <div className="stats-section">
+      <div className="stats-header" onClick={() => setCollapsed(!collapsed)}>
+        <h4>Quick Stats</h4>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <span className="muted small">
+            {evidence.length} items · {Object.keys(geneCounts).length} genes · {Object.keys(therapyCounts).length} therapies
+          </span>
+          <button className="collapse-icon" onClick={(e) => { e.stopPropagation(); setCollapsed(!collapsed); }}>
+            {collapsed ? "▼" : "▲"}
+          </button>
         </div>
       </div>
-      <div className="card">
-        <div className="card-title">Top therapies</div>
-        <div className="tag-row">
-          {top(therapyCounts).map(([t, c]) => (
-            <span key={t} className="pill">
-              {t} · {c}
-            </span>
-          ))}
+      {!collapsed && (
+        <div className="stats-grid-dense">
+          <div className="card">
+            <div className="card-title">Top genes</div>
+            <div className="tag-row">
+              {top(geneCounts).map(([g, c]) => (
+                <span key={g} className="pill">
+                  {g} · {c}
+                </span>
+              ))}
+            </div>
+          </div>
+          <div className="card">
+            <div className="card-title">Top therapies</div>
+            <div className="tag-row">
+              {top(therapyCounts).map(([t, c]) => (
+                <span key={t} className="pill">
+                  {t} · {c}
+                </span>
+              ))}
+            </div>
+          </div>
+          <div className="card">
+            <div className="card-title">Types</div>
+            <div className="tag-row">
+              {Object.entries(typeCounts).map(([k, v]) => (
+                <span key={k} className="pill">
+                  {k} · {v}
+                </span>
+              ))}
+            </div>
+          </div>
+          <div className="card">
+            <div className="card-title">Directions</div>
+            <div className="tag-row">
+              {Object.entries(directionCounts).map(([k, v]) => (
+                <span key={k} className="pill">
+                  {k} · {v}
+                </span>
+              ))}
+            </div>
+          </div>
         </div>
-      </div>
-      <div className="card">
-        <div className="card-title">Types</div>
-        <div className="tag-row">
-          {Object.entries(typeCounts).map(([k, v]) => (
-            <span key={k} className="pill">
-              {k} · {v}
-            </span>
-          ))}
-        </div>
-      </div>
-      <div className="card">
-        <div className="card-title">Directions</div>
-        <div className="tag-row">
-          {Object.entries(directionCounts).map(([k, v]) => (
-            <span key={k} className="pill">
-              {k} · {v}
-            </span>
-          ))}
-        </div>
-      </div>
+      )}
     </div>
   );
 }
 
 function CheckpointDeck({ phases, pdfUrl, onOpenRaw }) {
-  const reader = phases.reader;
-  const planner = phases.planner?.plan;
-  const extractorItems = phases.extractor?.items || [];
-  const critic = phases.critic?.critique;
-  const normalizerItems = phases.normalizer?.items || [];
+  console.log("[CheckpointDeck] Rendering with phases:", phases);
+
+  const reader = phases?.reader;
+  const planner = phases?.planner?.plan;
+  const extractorItems = phases?.extractor?.items || [];
+  const critic = phases?.critic?.critique;
+  const normalizerItems = phases?.normalizer?.items || [];
 
   const topList = (items) => (items || []).slice(0, 3);
+
+  // Check if we have any phase data
+  const hasAnyData = reader || planner || extractorItems.length > 0 || critic || normalizerItems.length > 0;
+
+  console.log("[CheckpointDeck] Has data?", hasAnyData, {
+    reader: !!reader,
+    planner: !!planner,
+    extractor: extractorItems.length,
+    critic: !!critic,
+    normalizer: normalizerItems.length
+  });
+
+  if (!hasAnyData) {
+    console.log("[CheckpointDeck] No data, showing fallback message");
+    return (
+      <div className="muted" style={{ padding: "20px", textAlign: "center" }}>
+        <p>No checkpoint data available for this paper.</p>
+        <p className="small">Checkpoints are created during the extraction process.</p>
+      </div>
+    );
+  }
+
+  console.log("[CheckpointDeck] Rendering checkpoint cards");
 
   return (
     <div className="deck-grid">
@@ -514,7 +648,13 @@ function CheckpointDeck({ phases, pdfUrl, onOpenRaw }) {
             </div>
         <div className="muted small">Type: {reader?.content?.paper_type || "—"}</div>
             <div className="muted small">
-          Sections: {(reader?.content?.sections || []).map((s) => s.name).join(", ") || "—"}
+          Sections: {
+            Array.isArray(reader?.content?.sections)
+              ? reader.content.sections.map((s) => s.name).join(", ")
+              : typeof reader?.content?.sections === "string"
+              ? "Available"
+              : "—"
+          }
             </div>
         <div className="muted small">
           NCT IDs: {reader?.content?.nct_ids ? JSON.stringify(reader.content.nct_ids) : "—"}
@@ -677,7 +817,389 @@ function CheckpointCards({ phases }) {
   );
 }
 
+// Clinical Evidence Row Component
+function ClinicalEvidenceRow({ item, onClick, selected }) {
+  const gene = (item.feature_names || []).join(", ") || "—";
+  const variant = (item.variant_names || []).join(", ") || "—";
+  const therapy = (item.therapy_names || []).join(", ") || "—";
+  const effect = item.evidence_significance || item.evidence_direction || "—";
+  const level = item.evidence_level || "—";
+  const confidence = typeof item.extraction_confidence === "number"
+    ? `${Math.round(item.extraction_confidence * 100)}%`
+    : item.extraction_confidence || "—";
+
+  const getEffectClass = (effect) => {
+    const effectUpper = String(effect).toUpperCase();
+    if (effectUpper.includes("SENSITIVITY") || effectUpper.includes("BETTER") || effectUpper.includes("RESPONSE")) {
+      return "sensitivity";
+    }
+    if (effectUpper.includes("RESISTANCE") || effectUpper.includes("POOR")) {
+      return "resistance";
+    }
+    return "default";
+  };
+
+  return (
+    <div
+      className={`clinical-row ${selected ? "selected" : ""}`}
+      onClick={() => onClick(item)}
+    >
+      <div className="clinical-row-main">
+        <span className="gene-badge-compact">{gene}</span>
+        <span className="variant-badge-compact">{variant}</span>
+        {therapy && therapy !== "—" && (
+          <>
+            <span className="arrow">→</span>
+            <span className="therapy-badge-compact">{therapy}</span>
+          </>
+        )}
+        <span className="arrow">→</span>
+        <span className={`effect-badge ${getEffectClass(effect)}`}>{effect}</span>
+      </div>
+
+      <div className="clinical-row-meta">
+        <span className="muted small">{item.disease_name || "—"}</span>
+        <span className="separator">•</span>
+        <Pill kind="compact">Level {level}</Pill>
+        <span className="separator">•</span>
+        <Pill kind="compact">{confidence} confidence</Pill>
+      </div>
+
+      <div className="clinical-row-prov">
+        {item.source_page_numbers && (
+          <span className="muted tiny">📄 p.{item.source_page_numbers}</span>
+        )}
+        {item.pmid && (
+          <span className="muted tiny">PMID:{item.pmid}</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Detail Field Component
+function DetailField({ label, value, ids, hgvs, rxnorm, ncit, efo, norm }) {
+  return (
+    <div className="detail-field">
+      <div className="detail-field-label">{label}</div>
+      <div className="detail-field-value">{value || "—"}</div>
+      {norm && norm !== value && (
+        <div className="detail-field-ids">Normalized: {norm}</div>
+      )}
+      {ids && ids.length > 0 && (
+        <div className="detail-field-ids">IDs: {ids.join(", ")}</div>
+      )}
+      {hgvs && hgvs.length > 0 && (
+        <div className="detail-field-ids">HGVS: {hgvs.join(", ")}</div>
+      )}
+      {rxnorm && rxnorm.length > 0 && (
+        <div className="detail-field-ids">RxNorm: {rxnorm.join(", ")}</div>
+      )}
+      {ncit && ncit.length > 0 && (
+        <div className="detail-field-ids">NCIt: {ncit.join(", ")}</div>
+      )}
+      {efo && (
+        <div className="detail-field-ids">EFO: {efo}</div>
+      )}
+    </div>
+  );
+}
+
+// Evidence Detail Panel Component
+function EvidenceDetailPanel({ item }) {
+  const renderStars = (rating) => {
+    if (!rating) return null;
+    return "★".repeat(rating) + "☆".repeat(5 - rating);
+  };
+
+  return (
+    <div className="detail-panel">
+      {/* Evidence Summary with Rating */}
+      {item.evidence_description && (
+        <div className="detail-section" style={{ background: '#f8fafc', padding: '14px', borderRadius: '8px', marginBottom: '16px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+            <h4 style={{ margin: 0 }}>Evidence Summary</h4>
+            {item.evidence_rating && (
+              <div style={{ color: '#f59e0b', fontSize: '16px', letterSpacing: '2px' }}>
+                {renderStars(item.evidence_rating)}
+              </div>
+            )}
+          </div>
+          <div style={{ fontSize: '0.9375rem', lineHeight: '1.6', color: '#334155' }}>
+            {item.evidence_description}
+          </div>
+        </div>
+      )}
+
+      {/* Publication Source */}
+      {(item.source_title || item.source_journal) && (
+        <div className="detail-section" style={{ background: '#eef2ff', padding: '10px 12px', borderRadius: '6px', marginBottom: '14px' }}>
+          {item.source_title && (
+            <div style={{ fontWeight: 600, fontSize: '0.875rem', marginBottom: '4px' }}>{item.source_title}</div>
+          )}
+          <div style={{ fontSize: '0.8125rem', color: '#64748b' }}>
+            {item.source_journal && <span>{item.source_journal}</span>}
+            {item.source_publication_year && <span> ({item.source_publication_year})</span>}
+            {item.pmcid && <span> • PMCID: {item.pmcid}</span>}
+          </div>
+        </div>
+      )}
+
+      {/* Confidence & Direction */}
+      <div style={{ display: 'flex', gap: '8px', marginBottom: '14px', flexWrap: 'wrap' }}>
+        {typeof item.extraction_confidence === 'number' && (
+          <Pill kind={item.extraction_confidence >= 0.9 ? 'success' : item.extraction_confidence >= 0.75 ? 'default' : 'warning'}>
+            Confidence: {Math.round(item.extraction_confidence * 100)}%
+          </Pill>
+        )}
+        {item.evidence_direction && (
+          <Pill kind="default">Direction: {item.evidence_direction}</Pill>
+        )}
+        {item.variant_origin && (
+          <Pill kind="default">{item.variant_origin}</Pill>
+        )}
+      </div>
+
+      {/* Verbatim Quote */}
+      <div className="detail-section">
+        <h4>Quote from Source</h4>
+        <div className="quote-box">
+          "{item.verbatim_quote || "No quote available"}"
+        </div>
+        {item.source_page_numbers && (
+          <div className="muted tiny" style={{ marginTop: '6px' }}>Source: {item.source_page_numbers}</div>
+        )}
+      </div>
+
+      {/* Extraction Reasoning */}
+      <div className="detail-section">
+        <h4>Extraction Reasoning</h4>
+        <p className="muted small" style={{ lineHeight: '1.6' }}>
+          {item.extraction_reasoning || "No reasoning provided"}
+        </p>
+      </div>
+
+      {/* Clinical Data */}
+      <div className="detail-section">
+        <h4>Clinical Data</h4>
+        <div className="detail-grid">
+          <DetailField
+            label="Gene"
+            value={item.feature_names?.join(", ")}
+            ids={item.gene_entrez_ids || item.feature_entrez_ids}
+          />
+          <DetailField
+            label="Variant"
+            value={item.variant_names?.join(", ")}
+            hgvs={item.variant_hgvs_descriptions}
+          />
+          {(item.variant_hgvs_c || item.variant_hgvs_p) && (
+            <DetailField
+              label="HGVS Notation"
+              value={[item.variant_hgvs_c, item.variant_hgvs_p].filter(Boolean).join(" / ")}
+            />
+          )}
+          {item.therapy_names && (
+            <DetailField
+              label="Therapy"
+              value={item.therapy_names.join(", ")}
+              rxnorm={item.therapy_rxnorm_ids}
+              ncit={item.therapy_ncit_ids}
+            />
+          )}
+          <DetailField
+            label="Disease"
+            value={item.disease_name}
+            efo={item.disease_efo_id}
+          />
+          {item.related_disease_efo_id && (
+            <DetailField
+              label="Related Disease"
+              value="See EFO ID"
+              efo={item.related_disease_efo_id}
+            />
+          )}
+        </div>
+      </div>
+
+      {/* Evidence Classification */}
+      <div className="detail-section">
+        <h4>Evidence Classification</h4>
+        <div className="detail-grid">
+          <DetailField
+            label="Evidence Type"
+            value={item.evidence_type}
+            norm={item.evidence_type_norm}
+          />
+          <DetailField
+            label="Evidence Level"
+            value={item.evidence_level}
+            norm={item.evidence_level_norm}
+          />
+          <DetailField
+            label="Significance"
+            value={item.evidence_significance}
+            norm={item.evidence_significance_norm}
+          />
+          {item.evidence_direction && (
+            <DetailField
+              label="Direction"
+              value={item.evidence_direction}
+            />
+          )}
+        </div>
+      </div>
+
+      {/* Genomic Coordinates */}
+      {(item.chromosome || item.start_position || item.stop_position || item.reference_build) && (
+        <div className="detail-section">
+          <h4>Genomic Coordinates</h4>
+          <div className="detail-grid">
+            {item.chromosome && <DetailField label="Chromosome" value={item.chromosome} />}
+            {item.start_position && <DetailField label="Start Position" value={item.start_position} />}
+            {item.stop_position && <DetailField label="Stop Position" value={item.stop_position} />}
+            {item.reference_build && <DetailField label="Reference Build" value={item.reference_build} />}
+          </div>
+        </div>
+      )}
+
+      {/* Database IDs */}
+      <div className="detail-section">
+        <h4>Database Identifiers</h4>
+        <div className="id-list">
+          {(item.gene_entrez_ids || item.feature_entrez_ids)?.length > 0 && (
+            <div className="id-row">
+              <span className="label-tiny">Entrez Gene:</span>
+              <span className="value-tiny">{(item.gene_entrez_ids || item.feature_entrez_ids).join(", ")}</span>
+            </div>
+          )}
+          {item.therapy_rxnorm_ids?.length > 0 && (
+            <div className="id-row">
+              <span className="label-tiny">RxNorm:</span>
+              <span className="value-tiny">{item.therapy_rxnorm_ids.join(", ")}</span>
+            </div>
+          )}
+          {item.therapy_ncit_ids?.length > 0 && (
+            <div className="id-row">
+              <span className="label-tiny">NCIt:</span>
+              <span className="value-tiny">{item.therapy_ncit_ids.join(", ")}</span>
+            </div>
+          )}
+          {item.disease_efo_id && (
+            <div className="id-row">
+              <span className="label-tiny">Disease EFO:</span>
+              <span className="value-tiny">{item.disease_efo_id}</span>
+            </div>
+          )}
+          {item.related_disease_efo_id && (
+            <div className="id-row">
+              <span className="label-tiny">Related Disease EFO:</span>
+              <span className="value-tiny">{item.related_disease_efo_id}</span>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Study Details */}
+      {(item.cohort_size || item.cancer_cell_fraction || item.clinical_trial_nct_ids) && (
+        <div className="detail-section">
+          <h4>Study Details</h4>
+          {item.cohort_size && (
+            <div className="muted small" style={{ marginBottom: '4px' }}>
+              <strong>Cohort Size:</strong> {item.cohort_size} patients
+            </div>
+          )}
+          {item.cancer_cell_fraction && (
+            <div className="muted small" style={{ marginBottom: '4px' }}>
+              <strong>Cancer Cell Fraction:</strong> {item.cancer_cell_fraction}
+            </div>
+          )}
+          {item.clinical_trial_nct_ids && (
+            <div className="muted small">
+              <strong>Clinical Trials:</strong> {item.clinical_trial_nct_ids}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Evidence Split-Pane Component
+function EvidenceSplitPane({ items, pdfUrl, filters, onFilterChange }) {
+  const [selectedEvidence, setSelectedEvidence] = useState(null);
+  const [showPdfPane, setShowPdfPane] = useState(false);
+
+  return (
+    <div className="split-pane-container">
+      <div className="evidence-list-pane">
+        <div className="pane-header">
+          <h4>Evidence Items ({items.length})</h4>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            {filters}
+            {pdfUrl && (
+              <button
+                className="pill"
+                onClick={() => setShowPdfPane(!showPdfPane)}
+                style={{ padding: '4px 10px', fontSize: '11px' }}
+              >
+                {showPdfPane ? "Hide" : "Show"} PDF
+              </button>
+            )}
+          </div>
+        </div>
+        <div className="evidence-list-scroll">
+          {items.length > 0 ? (
+            items.map((item, idx) => (
+              <ClinicalEvidenceRow
+                key={idx}
+                item={item}
+                selected={selectedEvidence === item}
+                onClick={setSelectedEvidence}
+              />
+            ))
+          ) : (
+            <div className="empty-state">
+              <div className="empty-state-icon">🔍</div>
+              <div>No evidence items found</div>
+              <div className="muted tiny">Try adjusting your filters</div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="evidence-detail-pane">
+        {selectedEvidence ? (
+          <EvidenceDetailPanel item={selectedEvidence} />
+        ) : (
+          <div className="empty-state">
+            <div className="empty-state-icon">👈</div>
+            <div>Select an evidence item to view details</div>
+            <div className="muted tiny">Click on any row in the list</div>
+          </div>
+        )}
+      </div>
+
+      {showPdfPane && pdfUrl && (
+        <div className="pdf-context-pane">
+          <div className="pane-header">
+            <h4>PDF Context</h4>
+            <button className="pill" onClick={() => setShowPdfPane(false)} style={{ padding: '4px 8px', fontSize: '11px' }}>✕</button>
+          </div>
+          <div style={{ height: 'calc(100% - 45px)', overflow: 'auto' }}>
+            <PdfViewer
+              url={pdfUrl}
+              onError={(err) => console.error("PDF error:", err)}
+            />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function App() {
+  const [showLanding, setShowLanding] = useState(true);
   const [papers, setPapers] = useState([]);
   const [selected, setSelected] = useState(null);
   const [output, setOutput] = useState(null);
@@ -685,6 +1207,7 @@ function App() {
   const [phases, setPhases] = useState({});
   const [sessionEvents, setSessionEvents] = useState([]);
   const [allEvidence, setAllEvidence] = useState([]);
+  const [researchContextCollapsed, setResearchContextCollapsed] = useState(true);
   const [graphFilters, setGraphFilters] = useState({
     type: "ALL",
     direction: "ALL",
@@ -696,12 +1219,15 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [jsonModal, setJsonModal] = useState({ open: false, title: "", data: null });
-  const [activeTab, setActiveTab] = useState("output");
+  const [activeTab, setActiveTab] = useState("insights");
+  const [insightsSubTab, setInsightsSubTab] = useState("overview");
+  const [kgView, setKgView] = useState("clinical"); // clinical, matrix
   const [viewMode, setViewMode] = useState("table");
   const [evidenceTypeFilter, setEvidenceTypeFilter] = useState("ALL");
   const [directionFilter, setDirectionFilter] = useState("ALL");
   const [searchTerm, setSearchTerm] = useState("");
   const [pdfStatus, setPdfStatus] = useState({ checked: false, available: false, error: "" });
+  const [graphFullscreen, setGraphFullscreen] = useState(false);
 
   function parseCheckpoints(raw) {
     const phases = { reader: null, planner: null, extractor: null, critic: null, normalizer: null };
@@ -759,9 +1285,31 @@ function App() {
 
   useEffect(() => {
     fetchJson(`${API_BASE}/api/papers`)
-      .then((data) => setPapers(data.papers || []))
+      .then((data) => {
+        const paperList = data.papers || [];
+        setPapers(paperList);
+
+        // Try to restore last selected paper from localStorage
+        const savedPaper = localStorage.getItem('selectedPaper');
+        if (savedPaper && paperList.some(p => p.id === savedPaper)) {
+          console.log("[App] Restoring selected paper from localStorage:", savedPaper);
+          setSelected(savedPaper);
+        } else if (paperList.length > 0 && !selected) {
+          // Only auto-select first paper if no saved selection
+          console.log("[App] Auto-selecting first paper:", paperList[0].id);
+          setSelected(paperList[0].id);
+        }
+      })
       .catch((err) => setError(err.message));
   }, []);
+
+  // Save selected paper to localStorage whenever it changes
+  useEffect(() => {
+    if (selected) {
+      console.log("[App] Saving selected paper to localStorage:", selected);
+      localStorage.setItem('selectedPaper', selected);
+    }
+  }, [selected]);
 
   useEffect(() => {
     let canceled = false;
@@ -784,7 +1332,9 @@ function App() {
             __evidenceId: `${o.id}__${idx}`,
           }))
         );
-        setAllEvidence(merged);
+        // Normalize evidence items
+        const normalized = normalizeEvidenceItems(merged);
+        setAllEvidence(normalized);
       } catch (err) {
         if (!canceled) setError(err.message);
       }
@@ -811,13 +1361,28 @@ function App() {
     ])
       .then(([out, cps, ses]) => {
         if (canceled) return;
-        setOutput(out?.output || null);
-        const sortedCheckpoints = (cps?.checkpoints || []).slice().sort((a, b) => (a.name || "").localeCompare(b.name || ""));
-        setCheckpoints(sortedCheckpoints);
-        setPhases(parseCheckpoints(sortedCheckpoints));
-        setSessionEvents(ses?.events || []);
+        try {
+          console.log("[Data Load] Paper:", selected);
+          console.log("[Data Load] Output:", out ? "✓" : "✗");
+          console.log("[Data Load] Checkpoints:", cps?.checkpoints?.length || 0);
+          console.log("[Data Load] Session events:", ses?.events?.length || 0);
+
+          setOutput(out?.output || null);
+          const sortedCheckpoints = (cps?.checkpoints || []).slice().sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+          setCheckpoints(sortedCheckpoints);
+
+          const parsedPhases = parseCheckpoints(sortedCheckpoints);
+          console.log("[Data Load] Parsed phases:", Object.keys(parsedPhases).filter(k => parsedPhases[k]));
+          setPhases(parsedPhases);
+
+          setSessionEvents(ses?.events || []);
+        } catch (error) {
+          console.error("[Data Load] Error processing data:", error);
+          if (!canceled) setError(error.message);
+        }
       })
       .catch((err) => {
+        console.error("[Data Load] Fetch error:", err);
         if (!canceled) setError(err.message);
       })
       .finally(() => {
@@ -913,6 +1478,20 @@ function App() {
   const directions = Array.from(new Set(evidenceItems.map((i) => i.evidence_direction).filter(Boolean)));
   const graphTypes = Array.from(new Set(allEvidence.map((i) => i.evidence_type).filter(Boolean)));
   const graphDirections = Array.from(new Set(allEvidence.map((i) => i.evidence_direction).filter(Boolean)));
+
+  // Build knowledge graphs from all evidence across all papers
+  const knowledgeGraphs = useMemo(() => {
+    if (!allEvidence || allEvidence.length === 0) {
+      return {
+        evidenceGraph: { nodes: [], links: [] },
+        clinicalGraph: { nodes: [], links: [], assertions: [] },
+        paperGraph: { nodes: [], links: [] },
+        stats: {}
+      };
+    }
+    return buildKnowledgeGraphs(allEvidence);
+  }, [allEvidence]);
+
   const groundTruthPath =
     selected && selected.startsWith("PMID_")
       ? `/Users/ali/Downloads/civic/civic_data_analysis/ground_truth/${selected}_ground_truth.json`
@@ -932,82 +1511,151 @@ function App() {
     });
   }, [allEvidence, graphFilters]);
 
-  const calcWeight = (ev) => {
-    const levelScores = { A: 1.2, B: 1.0, C: 0.9, D: 0.7, CASE_STUDY: 0.5 };
-    const level = levelScores[ev.evidence_level] || 0.4;
-    const conf =
-      typeof ev.extraction_confidence === "number"
-        ? ev.extraction_confidence
-        : ev.extraction_confidence === "High"
-          ? 0.9
-          : 0.6;
-    const cohort = ev.cohort_size ? Math.min(Math.log10(ev.cohort_size + 1) / 3, 1) : 0.2;
-    return Math.max(0.2, level * (0.5 + conf * 0.4 + cohort * 0.3));
-  };
-
-  const significanceColor = (sig) => {
-    const s = (sig || "").toLowerCase();
-    if (s.includes("resist")) return "#ef4444";
-    if (s.includes("response") || s.includes("sensitivity")) return "#22c55e";
-    if (s.includes("poor") || s.includes("progress") || s.includes("outcome")) return "#f97316";
-    return "#6366f1";
-  };
 
   const graphData = useMemo(() => {
     const nodes = new Map();
     const links = [];
+
     const addNode = (id, label, kind, meta = {}) => {
       if (!id) return;
-      if (!nodes.has(id)) nodes.set(id, { id, label, kind, ...meta });
+      if (!nodes.has(id)) {
+        nodes.set(id, {
+          id,
+          label,
+          kind,
+          color: getNodeColor(kind),
+          ...meta
+        });
+      }
     };
-    graphEvidence.forEach((ev) => {
-      const evidId = ev.__evidenceId;
-      const diseaseId = ev.disease_efo_id || ev.disease_name || "Disease";
-      const outcome = ev.evidence_significance || ev.evidence_type || "Outcome";
-      const weight = calcWeight(ev);
-      const sigColor = significanceColor(ev.evidence_significance);
 
-      addNode(`claim:${evidId}`, ev.feature_names?.join?.(", ") || "Evidence", "evidence", {
-        paper: ev.__paperId,
-        weight,
-        sig: ev.evidence_significance,
-      });
+    graphEvidence.forEach((ev) => {
+      const evidId = ev.evidence_item_uid || ev.__evidenceId;
+      const diseaseId = ev.disease_efo_id || ev.disease_name || "Disease";
+      const outcome = ev.evidence_significance_norm || ev.evidence_significance || ev.evidence_type || "Outcome";
+      const weight = calculateEvidenceWeight(ev);
+      const sigColor = getSignificanceColor(ev.evidence_significance_norm || ev.evidence_significance);
+
+      // Create EvidenceItem node (first-class citizen)
+      addNode(`evidence:${evidId}`,
+        `${ev.feature_names?.join?.(", ") || "Evidence"} → ${outcome}`,
+        "evidence",
+        {
+          paper: ev.__paperId,
+          weight,
+          sig: ev.evidence_significance_norm || ev.evidence_significance,
+          level: ev.evidence_level_norm || ev.evidence_level,
+          type: ev.evidence_type,
+          variantType: ev.variant_type,
+          confidence: ev.extraction_confidence,
+          cohortSize: ev.cohort_size,
+          quote: ev.verbatim_quote,
+          description: ev.evidence_description,
+          fullEvidence: ev
+        }
+      );
+
+      // Create entity nodes
       addNode(`paper:${ev.__paperId}`, ev.__paperId, "paper");
-      addNode(`disease:${diseaseId}`, ev.disease_name || diseaseId, "disease");
-      (ev.feature_names || []).forEach((g) => addNode(`gene:${g}`, g, "gene"));
-      (ev.variant_names || []).forEach((v) => addNode(`alt:${v}`, v, "alteration"));
-      (ev.therapy_names || []).forEach((t) => addNode(`tx:${t}`, t, "therapy"));
+      addNode(`disease:${diseaseId}`, ev.disease_name || diseaseId, "disease", {
+        efoId: ev.disease_efo_id
+      });
+
+      (ev.feature_names || []).forEach((g) =>
+        addNode(`gene:${g}`, g, "gene", {
+          entrezIds: ev.feature_entrez_ids || []
+        })
+      );
+
+      (ev.variant_names || []).forEach((v) =>
+        addNode(`variant:${v}`, v, "variant", {
+          type: ev.variant_type,
+          hgvs: ev.variant_hgvs_descriptions || []
+        })
+      );
+
+      (ev.therapy_names || []).forEach((t) =>
+        addNode(`therapy:${t}`, t, "therapy", {
+          rxnormIds: ev.therapy_rxnorm_ids || [],
+          ncitIds: ev.therapy_ncit_ids || []
+        })
+      );
+
       addNode(`outcome:${outcome}`, outcome, "outcome");
 
-      links.push({ source: `paper:${ev.__paperId}`, target: `claim:${evidId}`, kind: "SUPPORTS", weight, color: sigColor });
-      links.push({ source: `claim:${evidId}`, target: `disease:${diseaseId}`, kind: "ABOUT_DISEASE", weight, color: sigColor });
+      // Create edges from EvidenceItem to entities
+      links.push({
+        source: `paper:${ev.__paperId}`,
+        target: `evidence:${evidId}`,
+        kind: "CITED_FROM",
+        weight,
+        color: sigColor
+      });
+
+      links.push({
+        source: `evidence:${evidId}`,
+        target: `disease:${diseaseId}`,
+        kind: "IN_DISEASE",
+        weight,
+        color: sigColor
+      });
+
       (ev.feature_names || []).forEach((g) =>
-        links.push({ source: `claim:${evidId}`, target: `gene:${g}`, kind: "ABOUT_BIOMARKER", weight, color: sigColor })
+        links.push({
+          source: `evidence:${evidId}`,
+          target: `gene:${g}`,
+          kind: "ABOUT_GENE",
+          weight,
+          color: sigColor
+        })
       );
+
       (ev.variant_names || []).forEach((v) =>
-        links.push({ source: `claim:${evidId}`, target: `alt:${v}`, kind: "ABOUT_ALTERATION", weight, color: sigColor })
+        links.push({
+          source: `evidence:${evidId}`,
+          target: `variant:${v}`,
+          kind: "ABOUT_VARIANT",
+          weight,
+          color: sigColor
+        })
       );
+
       (ev.therapy_names || []).forEach((t) =>
-        links.push({ source: `claim:${evidId}`, target: `tx:${t}`, kind: "ABOUT_THERAPY", weight, color: sigColor })
+        links.push({
+          source: `evidence:${evidId}`,
+          target: `therapy:${t}`,
+          kind: "INVOLVES_THERAPY",
+          weight,
+          color: sigColor
+        })
       );
-      links.push({ source: `claim:${evidId}`, target: `outcome:${outcome}`, kind: "HAS_SIGNIFICANCE", weight, color: sigColor });
+
+      links.push({
+        source: `evidence:${evidId}`,
+        target: `outcome:${outcome}`,
+        kind: "HAS_SIGNIFICANCE",
+        weight,
+        color: sigColor
+      });
     });
+
     return { nodes: Array.from(nodes.values()), links };
   }, [graphEvidence]);
 
   const graphDrillEvidence = useMemo(() => {
     if (!graphNode) return [];
     const id = graphNode.id;
+
     if (id.startsWith("gene:")) {
       const name = id.replace("gene:", "");
       return graphEvidence.filter((ev) => ev.feature_names?.includes(name));
     }
-    if (id.startsWith("alt:")) {
-      const name = id.replace("alt:", "");
+    if (id.startsWith("variant:")) {
+      const name = id.replace("variant:", "");
       return graphEvidence.filter((ev) => ev.variant_names?.includes(name));
     }
-    if (id.startsWith("tx:")) {
-      const name = id.replace("tx:", "");
+    if (id.startsWith("therapy:")) {
+      const name = id.replace("therapy:", "");
       return graphEvidence.filter((ev) => ev.therapy_names?.includes(name));
     }
     if (id.startsWith("disease:")) {
@@ -1016,12 +1664,20 @@ function App() {
     }
     if (id.startsWith("outcome:")) {
       const name = id.replace("outcome:", "");
-      return graphEvidence.filter((ev) => (ev.evidence_significance || ev.evidence_type) === name);
+      const norm = name.toUpperCase();
+      return graphEvidence.filter((ev) =>
+        (ev.evidence_significance_norm || ev.evidence_significance || ev.evidence_type || "").toUpperCase() === norm
+      );
     }
-    if (id.startsWith("claim:")) {
-      const evidId = id.replace("claim:", "");
-      return graphEvidence.filter((ev) => ev.__evidenceId === evidId);
+    if (id.startsWith("evidence:")) {
+      const evidId = id.replace("evidence:", "");
+      return graphEvidence.filter((ev) => (ev.evidence_item_uid || ev.__evidenceId) === evidId);
     }
+    if (id.startsWith("paper:")) {
+      const paperId = id.replace("paper:", "");
+      return graphEvidence.filter((ev) => ev.__paperId === paperId);
+    }
+
     return [];
   }, [graphNode, graphEvidence]);
   const exportEvidenceCsv = () => {
@@ -1072,9 +1728,35 @@ function App() {
     URL.revokeObjectURL(url);
   };
 
+  if (showLanding) {
+    return <LandingPage onGetStarted={() => setShowLanding(false)} />;
+  }
+
   return (
     <div className="layout">
       <aside className="sidebar">
+        {/* Research context overview - always visible */}
+        <div className="research-context-container sidebar-version">
+          <div className="research-context-header" onClick={() => setResearchContextCollapsed(!researchContextCollapsed)}>
+            <h3>Research Overview</h3>
+            <button
+              className="collapse-btn-small"
+              title={researchContextCollapsed ? "Expand" : "Collapse"}
+            >
+              {researchContextCollapsed ? "▼" : "▲"}
+            </button>
+          </div>
+          {!researchContextCollapsed && (
+            <ResearchContext
+              papers={papers}
+              allEvidence={allEvidence}
+              selected={selected}
+              output={output}
+              phases={phases}
+            />
+          )}
+        </div>
+
         <h2>Myeloma Evidence Papers</h2>
         <div className="paper-list">
           {papers.filter((p) => p.id.startsWith("PMID_")).length > 0 && (
@@ -1086,7 +1768,7 @@ function App() {
               <button
                 key={p.id}
                 className={`paper-btn ${selected === p.id ? "active" : ""}`}
-                onClick={() => setSelected(p.id)}
+                onClick={() => { console.log("[Paper] Selected:", p.id); setSelected(p.id); }}
               >
                 <div className="paper-title">{p.id.replace("PMID_", "PMID ")}</div>
                 <div className="paper-meta">
@@ -1103,7 +1785,7 @@ function App() {
             <button
               key={p.id}
               className={`paper-btn ${selected === p.id ? "active" : ""}`}
-              onClick={() => setSelected(p.id)}
+              onClick={() => { console.log("[Paper] Selected:", p.id); setSelected(p.id); }}
             >
               <div className="paper-title">{p.id}</div>
               <div className="paper-meta">
@@ -1118,12 +1800,12 @@ function App() {
       <main className="main">
         <header className="header">
           <div>
-            <h1>Evidence Extraction Viewer</h1>
+            <h1>Reader-First Multi-Agent Evidence Extraction System</h1>
             <p className="muted">
-              ONCO CITE case study on multiple myeloma papers: CIViC PMIDs show original ground truth; new papers extend
-              the set with higher-fidelity extractions. Navigate by paper to view PDF, checkpoints, and final outputs.
+              Multiple Myeloma validation corpus: 10 CIViC baseline papers + 5 additional papers demonstrating
+              <strong> 81.8% superiority over manual curation</strong> (60 vs 33 items, p&lt;0.001, Cohen's d=1.31)
             </p>
-            <p className="muted small">Pipeline: Reader → Planner → Extractor → Critic → Normalizer</p>
+            <p className="muted small">Four-Phase Architecture: 01 Reader → 02 Planner → 03 Extractor-Critic → 04 Normalizer</p>
           </div>
           <div className="header-pills">
             {loading && <Pill>Loading…</Pill>}
@@ -1131,185 +1813,179 @@ function App() {
           </div>
         </header>
 
-        {!selected && <div className="muted">Select a paper to view artifacts.</div>}
+        {!selected && <div className="muted" style={{ padding: "20px 24px" }}>Select a paper from the sidebar to view detailed phase outputs and PDF artifacts.</div>}
 
         {selected && (
           <div className="content">
             <div className="tab-bar">
-              <button className={`tab-btn ${activeTab === "pdf" ? "active" : ""}`} onClick={() => setActiveTab("pdf")}>
-                Original PDF
+              <button className={`tab-btn ${activeTab === "pdf" ? "active" : ""}`} onClick={() => { console.log("[Tab] Switching to: pdf"); setActiveTab("pdf"); }}>
+                📄 Original PDF
               </button>
-              <button className={`tab-btn ${activeTab === "output" ? "active" : ""}`} onClick={() => setActiveTab("output")}>
-                Final Output
-              </button>
-              <button className={`tab-btn ${activeTab === "plan" ? "active" : ""}`} onClick={() => setActiveTab("plan")}>
-                Plan & Critique
-              </button>
-              <button className={`tab-btn ${activeTab === "graph" ? "active" : ""}`} onClick={() => setActiveTab("graph")}>
-                Knowledge Graph
-              </button>
-              <button className={`tab-btn ${activeTab === "checkpoints" ? "active" : ""}`} onClick={() => setActiveTab("checkpoints")}>
-                Checkpoints
-              </button>
-              <button className={`tab-btn ${activeTab === "timeline" ? "active" : ""}`} onClick={() => setActiveTab("timeline")}>
-                Timeline
+              <button className={`tab-btn ${activeTab === "insights" ? "active" : ""}`} onClick={() => { console.log("[Tab] Switching to: insights"); setActiveTab("insights"); }}>
+                📊 Insights
               </button>
             </div>
 
             {activeTab === "pdf" && (
               <div className="pane">
-                <SectionHeader
-                  title="Original PDF"
-                  right={
-                    pdfUrl ? (
-                      <div className="tag-row">
-                        <a className="pill link-pill" href={pdfUrl} target="_blank" rel="noreferrer">
-                          Open in new tab
-                        </a>
-                        <a className="pill" href={pdfUrl} download>
-                          Download
-                        </a>
-                      </div>
-                    ) : null
-                  }
-                />
-                {pdfUrl ? (
-                  pdfStatus.checked && !pdfStatus.available ? (
-                    <div className="muted">
-                      PDF not reachable at {pdfUrl}.{" "}
-                      <a href={pdfUrl} target="_blank" rel="noreferrer">
-                        Try opening directly
-                      </a>
-                    </div>
-                  ) : (
-                    <>
-                      {currentPaper?.pdfPath && (
-                        <div className="muted small">Resolved path: {currentPaper.pdfPath}</div>
-                      )}
-                      <object className="pdf-embed" data={`${pdfUrl}#view=FitH`} type="application/pdf">
-                        <iframe className="pdf-embed" src={pdfUrl} title={selected} />
-                        <div className="muted">
-                          Inline PDF failed.{" "}
-                          <a href={pdfUrl} target="_blank" rel="noreferrer">
-                            Open in new tab
-                          </a>
-                        </div>
-                      </object>
-                    </>
-                  )
-                ) : (
-                  <div className="muted">PDF not available.</div>
+                <SectionHeader title="Original PDF" />
+                {currentPaper?.pdfPath && (
+                  <div className="muted small">Resolved path: {currentPaper.pdfPath}</div>
                 )}
+                <PdfViewer url={pdfUrl} onError={(err) => setError(err)} />
               </div>
             )}
 
-            {activeTab === "output" && (
+            {activeTab === "insights" && (
               <div className="pane">
-                <SectionHeader
-                  title="Final Output"
-                  right={
-                    output ? (
-                      <div className="tag-row">
-                        <button className="pill" onClick={() => openJson("Final output JSON", output)}>
-                          View JSON
-                        </button>
-                        <button className="pill" onClick={() => downloadJson(output, `${selected || "final_output"}.json`)}>
-                          Download JSON
-                        </button>
-                      </div>
-                    ) : null
-                  }
-                />
+                <div className="sub-tab-bar">
+                  <button className={`sub-tab-btn ${insightsSubTab === "overview" ? "active" : ""}`}
+                          onClick={() => setInsightsSubTab("overview")}>Overview</button>
+                  <button className={`sub-tab-btn ${insightsSubTab === "evidence" ? "active" : ""}`}
+                          onClick={() => setInsightsSubTab("evidence")}>Evidence</button>
+                  <button className={`sub-tab-btn ${insightsSubTab === "matrix" ? "active" : ""}`}
+                          onClick={() => setInsightsSubTab("matrix")}>Matrix</button>
+                  <button className={`sub-tab-btn ${insightsSubTab === "provenance" ? "active" : ""}`}
+                          onClick={() => setInsightsSubTab("provenance")}>Provenance</button>
+                </div>
+
+                {insightsSubTab === "overview" && (
+                  <div style={{ padding: "16px 20px", overflow: "auto", maxHeight: "calc(100vh - 250px)" }}>
+                    <StatsGrid evidence={filteredEvidence} defaultCollapsed={false} />
+                    {output?.plan && <PlanPanel plan={output.plan} />}
+                    {output?.final_critique && <CritiquePanel critique={output.final_critique} />}
+                  </div>
+                )}
+
+                {insightsSubTab === "evidence" && (
+              <div style={{ height: "100%" }}>
                 {output ? (
-                  <>
-                    <div className="card paper-meta">
-                      <div className="card-title">{paperTitle}</div>
-                      <div className="muted small">Authors: {paperAuthors}</div>
-                      <div className="muted small">Journal: {paperJournal}</div>
-                      <div className="muted small">Year: {paperYear} · Pages: {paperPages}</div>
-                      <div className="muted small">Type: {paperType}</div>
-                      {currentPaper?.pdfPath && <div className="muted small">PDF path: {currentPaper.pdfPath}</div>}
-                      <div className="pill-row">
-                        <Pill>Items: {output.extraction?.items ?? "—"}</Pill>
-                        <Pill>Iterations: {output.extraction?.iterations ?? "—"}</Pill>
-                        <Pill>Duration: {formatSeconds(output.timing)}</Pill>
-                      </div>
-                      <div className="muted small">PMID: {clean(evidenceMeta.pmid)} · PMCID: {clean(evidenceMeta.pmcid)}</div>
-                      <div className="muted small">
-                        NCT IDs:
-                        <TagList
-                          items={trials.map((t) => t.id)}
-                          hrefBuilder={(id) => `https://clinicaltrials.gov/study/${id}`}
-                          title="Reader NCT IDs"
-                        />
-                      </div>
-                      {output.log_file && <div className="muted small">Log file: {output.log_file}</div>}
-                      {groundTruthPath && (
-                      <div className="muted small">
-                          Ground truth: {groundTruthPath}{" "}
-                          <button className="pill inline" onClick={() => copyText(groundTruthPath)}>
-                            Copy path
-                          </button>
-                      </div>
-                      )}
-                      </div>
-
-                    <StatsGrid evidence={filteredEvidence} />
-
-                    <div className="filters">
-                      <div className="filter-group">
-                        <label>Evidence type</label>
-                        <select value={evidenceTypeFilter} onChange={(e) => setEvidenceTypeFilter(e.target.value)}>
-                          <option value="ALL">All</option>
+                  <EvidenceSplitPane
+                    items={filteredEvidence}
+                    pdfUrl={pdfUrl}
+                    filters={
+                      <>
+                        <select
+                          value={evidenceTypeFilter}
+                          onChange={(e) => setEvidenceTypeFilter(e.target.value)}
+                          style={{ padding: '4px 8px', fontSize: '12px', borderRadius: '4px', border: '1px solid #e3e8f0' }}
+                        >
+                          <option value="ALL">All Types</option>
                           {evidenceTypes.map((t) => (
-                            <option key={t} value={t}>
-                              {t}
-                            </option>
+                            <option key={t} value={t}>{t}</option>
                           ))}
                         </select>
-                      </div>
-                      <div className="filter-group">
-                        <label>Direction</label>
-                        <select value={directionFilter} onChange={(e) => setDirectionFilter(e.target.value)}>
-                          <option value="ALL">All</option>
+                        <select
+                          value={directionFilter}
+                          onChange={(e) => setDirectionFilter(e.target.value)}
+                          style={{ padding: '4px 8px', fontSize: '12px', borderRadius: '4px', border: '1px solid #e3e8f0' }}
+                        >
+                          <option value="ALL">All Directions</option>
                           {directions.map((d) => (
-                            <option key={d} value={d}>
-                              {d}
-                            </option>
+                            <option key={d} value={d}>{d}</option>
                           ))}
                         </select>
-                      </div>
-                      <div className="filter-group">
-                        <label>Search</label>
                         <input
                           type="text"
                           value={searchTerm}
                           onChange={(e) => setSearchTerm(e.target.value)}
-                          placeholder="Filter text"
+                          placeholder="Search..."
+                          style={{ padding: '4px 8px', fontSize: '12px', borderRadius: '4px', border: '1px solid #e3e8f0', width: '150px' }}
                         />
-                      </div>
-                      <div className="pill muted small">{filteredEvidence.length} / {evidenceItems.length} items</div>
-                      <button className="pill" onClick={exportEvidenceCsv} disabled={!filteredEvidence.length}>
-                        Export CSV
-                      </button>
-                      </div>
-
-                    <div className="view-toggle">
-                      <button className={`pill ${viewMode === "table" ? "active" : ""}`} onClick={() => setViewMode("table")}>
-                        Table
-                      </button>
-                      <button className={`pill ${viewMode === "cards" ? "active" : ""}`} onClick={() => setViewMode("cards")}>
-                        Cards
-                      </button>
-                    </div>
-
-                    {viewMode === "table" ? <EvidenceTable items={filteredEvidence} /> : <EvidenceCards items={filteredEvidence} />}
-                  </>
+                        <button
+                          className="pill"
+                          onClick={exportEvidenceCsv}
+                          disabled={!filteredEvidence.length}
+                          style={{ padding: '4px 10px', fontSize: '11px' }}
+                        >
+                          Export CSV
+                        </button>
+                      </>
+                    }
+                  />
                 ) : (
-                  <div className="muted">No final output yet.</div>
-                        )}
-                      </div>
+                  <div className="empty-state">
+                    <div className="empty-state-icon">📊</div>
+                    <div>No extraction output available</div>
+                    <div className="muted tiny">Run the extraction first to see evidence items</div>
+                  </div>
+                )}
+              </div>
             )}
+
+            {insightsSubTab === "matrix" && (
+              <div>
+                {/* Knowledge Graph View Switcher */}
+                <div className="kg-view-switcher">
+                  <button
+                    className={`kg-view-btn ${kgView === 'clinical' ? 'active' : ''}`}
+                    onClick={() => setKgView('clinical')}
+                  >
+                    🔬 Clinical Map
+                  </button>
+                  <button
+                    className={`kg-view-btn ${kgView === 'matrix' ? 'active' : ''}`}
+                    onClick={() => setKgView('matrix')}
+                  >
+                    📊 Evidence Matrix
+                  </button>
+
+                  {/* Stats summary */}
+                  <div style={{ marginLeft: 'auto', display: 'flex', gap: '8px', alignItems: 'center' }}>
+                    <div className="pill muted small">
+                      {knowledgeGraphs.stats.total_papers || 0} papers
+                    </div>
+                    <div className="pill muted small">
+                      {knowledgeGraphs.stats.total_evidence_items || 0} evidence items
+                    </div>
+                    <div className="pill muted small">
+                      {knowledgeGraphs.stats.total_assertions || 0} assertions
+                    </div>
+                  </div>
+                </div>
+
+                {/* Render appropriate view */}
+                <div style={{ padding: '16px 20px', overflow: 'auto', minHeight: '800px' }}>
+                  {allEvidence.length === 0 ? (
+                    <div className="empty-state">
+                      <div className="empty-state-icon">🔍</div>
+                      <div>No evidence data available</div>
+                      <div className="muted tiny">Load papers with extraction outputs to see the knowledge graph</div>
+                    </div>
+                  ) : (
+                    <>
+                      {kgView === 'clinical' && (
+                        <ClinicalMapView
+                          clinicalGraph={knowledgeGraphs.clinicalGraph}
+                          onAssertionClick={(assertion) => {
+                            // Could open a modal or jump to evidence tab
+                            console.log('Assertion clicked:', assertion);
+                          }}
+                        />
+                      )}
+
+                      {kgView === 'matrix' && (
+                        <MatrixView clinicalGraph={knowledgeGraphs.clinicalGraph} />
+                      )}
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {insightsSubTab === "provenance" && (
+              <div style={{ padding: "16px 20px", overflow: "auto", maxHeight: "calc(100vh - 250px)" }}>
+                <CheckpointDeck phases={phases} pdfUrl={pdfUrl} onOpenRaw={(title, data) => openJson(title, data)} />
+                {sessionEvents.length > 0 && (
+                  <div style={{ marginTop: "20px" }}>
+                    <h4>Timeline Events</h4>
+                    <Timeline events={sessionEvents} />
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
 
             {activeTab === "plan" && (
               <div className="pane">
@@ -1327,8 +2003,47 @@ function App() {
             )}
 
             {activeTab === "graph" && (
-              <div className="pane">
-                <SectionHeader title="Knowledge Graph (all papers)" />
+              <div className={`pane ${graphFullscreen ? "fullscreen-pane" : ""}`}>
+                <SectionHeader
+                  title="Knowledge Graph (all papers)"
+                  right={
+                    <div className="tag-row">
+                      <div className="pill muted small">
+                        {graphData.nodes.length} nodes · {graphData.links.length} edges
+                      </div>
+                      <button className="pill" onClick={() => setGraphFullscreen(!graphFullscreen)}>
+                        {graphFullscreen ? "Exit Fullscreen" : "Fullscreen"}
+                      </button>
+                    </div>
+                  }
+                />
+
+                {/* Trust UI - Quality Indicators */}
+                {selected && phases.planner && phases.critic && (
+                  <div className="trust-ui">
+                    <div className="trust-card">
+                      <div className="muted tiny">EXPECTED</div>
+                      <div className="big">{phases.planner?.plan?.expected_items ?? '?'}</div>
+                      <div className="muted tiny">items</div>
+                    </div>
+                    <div className="trust-card">
+                      <div className="muted tiny">EXTRACTED</div>
+                      <div className="big">{output?.extraction?.items ?? '?'}</div>
+                      <div className="muted tiny">items</div>
+                    </div>
+                    <div className="trust-card">
+                      <Pill kind={phases.critic?.critique?.overall_assessment === 'APPROVE' ? 'success' : 'warning'}>
+                        {phases.critic?.critique?.overall_assessment || '—'}
+                      </Pill>
+                      <div className="muted tiny">Quality Assessment</div>
+                    </div>
+                    <div className="trust-card">
+                      <div className="muted tiny">PAPER TYPE</div>
+                      <div className="small strong">{phases.planner?.plan?.paper_type || output?.paper_info?.paper_type || '—'}</div>
+                    </div>
+                  </div>
+                )}
+
                 <div className="filters">
                   <div className="filter-group">
                     <label>Disease scope</label>
@@ -1387,19 +2102,35 @@ function App() {
                 </div>
 
                 {graphData.nodes.length ? (
-                  <div className="graph-grid">
+                  <div className={graphFullscreen ? "graph-fullscreen-grid" : "graph-grid"}>
                     <div className="graph-box">
                       <ForceGraph2D
                         graphData={{
                           nodes: graphData.nodes,
                           links: graphData.links.filter((l) => l.weight >= graphFilters.minWeight),
                         }}
-                        height={480}
-                        nodeLabel={(n) => `${n.label} (${n.kind}${n.paper ? ` · ${n.paper}` : ""})`}
-                        nodeAutoColorBy="kind"
+                        width={graphFullscreen ? window.innerWidth * 0.65 : undefined}
+                        height={graphFullscreen ? window.innerHeight - 250 : 600}
+                        nodeLabel={(n) => {
+                          const parts = [`${n.label} (${n.kind})`];
+                          if (n.paper) parts.push(`Paper: ${n.paper}`);
+                          if (n.level) parts.push(`Level: ${n.level}`);
+                          if (n.sig) parts.push(`Sig: ${n.sig}`);
+                          if (n.confidence) parts.push(`Conf: ${typeof n.confidence === 'number' ? Math.round(n.confidence * 100) + '%' : n.confidence}`);
+                          return parts.join(' · ');
+                        }}
+                        nodeColor={(n) => n.color || getNodeColor(n.kind)}
+                        nodeRelSize={7}
+                        nodeVal={(n) => n.kind === 'evidence' ? (n.weight || 1) * 8 : n.kind === 'gene' ? 6 : 4}
                         linkColor={(l) => l.color || "#94a3b8"}
                         linkWidth={(l) => Math.max(1, (l.weight || 0.5) * 3)}
+                        linkDirectionalParticles={(l) => l.weight > 0.5 ? 3 : 1}
+                        linkDirectionalParticleWidth={(l) => l.weight * 2}
+                        linkLabel={(l) => l.kind}
                         onNodeClick={(node) => setGraphNode(node)}
+                        onNodeHover={(node) => node ? document.body.style.cursor = 'pointer' : document.body.style.cursor = 'default'}
+                        cooldownTicks={100}
+                        onEngineStop={() => {}}
                       />
                     </div>
                     <div className="graph-side">
@@ -1407,20 +2138,86 @@ function App() {
                         <div className="card-title">Node details</div>
                         {graphNode ? (
                           <>
-                            <div className="muted small">Label: {graphNode.label}</div>
-                            <div className="muted small">Type: {graphNode.kind}</div>
-                            {graphNode.paper && <div className="muted small">Paper: {graphNode.paper}</div>}
-                            {graphNode.sig && <div className="muted small">Significance: {graphNode.sig}</div>}
+                            <div className="muted small"><strong>Label:</strong> {graphNode.label}</div>
+                            <div className="muted small"><strong>Type:</strong> {graphNode.kind}</div>
+
+                            {graphNode.kind === 'evidence' && graphNode.fullEvidence && (
+                              <>
+                                <div className="pill-row" style={{marginTop: '8px'}}>
+                                  <Pill kind={graphNode.type === 'PREDICTIVE' ? 'success' : 'default'}>
+                                    {graphNode.type || '—'}
+                                  </Pill>
+                                  <Pill>{graphNode.level || '—'}</Pill>
+                                  <Pill>{graphNode.sig || '—'}</Pill>
+                                </div>
+                                {graphNode.description && (
+                                  <div className="muted small" style={{marginTop: '8px'}}>
+                                    <strong>Description:</strong> {graphNode.description}
+                                  </div>
+                                )}
+                                {graphNode.quote && (
+                                  <div className="quote-block" style={{marginTop: '8px'}}>
+                                    <div className="label tiny">Quote</div>
+                                    <div className="muted tiny">"{graphNode.quote}"</div>
+                                  </div>
+                                )}
+                                {graphNode.confidence && (
+                                  <div className="muted small">
+                                    <strong>Confidence:</strong> {typeof graphNode.confidence === 'number' ? Math.round(graphNode.confidence * 100) + '%' : graphNode.confidence}
+                                  </div>
+                                )}
+                                {graphNode.cohortSize && (
+                                  <div className="muted small">
+                                    <strong>Cohort:</strong> {graphNode.cohortSize}
+                                  </div>
+                                )}
+                                {graphNode.variantType && (
+                                  <div className="muted small">
+                                    <strong>Variant Type:</strong> {graphNode.variantType}
+                                  </div>
+                                )}
+                              </>
+                            )}
+
+                            {graphNode.kind === 'gene' && graphNode.entrezIds?.length > 0 && (
+                              <div className="muted small"><strong>Entrez IDs:</strong> {graphNode.entrezIds.join(', ')}</div>
+                            )}
+
+                            {graphNode.kind === 'disease' && graphNode.efoId && (
+                              <div className="muted small"><strong>EFO ID:</strong> {graphNode.efoId}</div>
+                            )}
+
+                            {graphNode.kind === 'therapy' && (
+                              <>
+                                {graphNode.rxnormIds?.length > 0 && (
+                                  <div className="muted small"><strong>RxNorm IDs:</strong> {graphNode.rxnormIds.join(', ')}</div>
+                                )}
+                                {graphNode.ncitIds?.length > 0 && (
+                                  <div className="muted small"><strong>NCIt IDs:</strong> {graphNode.ncitIds.join(', ')}</div>
+                                )}
+                              </>
+                            )}
+
+                            {graphNode.kind === 'variant' && (
+                              <>
+                                <div className="muted small"><strong>Type:</strong> {graphNode.type || '—'}</div>
+                                {graphNode.hgvs?.length > 0 && (
+                                  <div className="muted small"><strong>HGVS:</strong> {graphNode.hgvs.join(', ')}</div>
+                                )}
+                              </>
+                            )}
+
+                            {graphNode.paper && <div className="muted small"><strong>Paper:</strong> {graphNode.paper}</div>}
                             {graphNode.weight && (
-                              <div className="muted small">Weight: {graphNode.weight.toFixed?.(2) || graphNode.weight}</div>
+                              <div className="muted small"><strong>Weight:</strong> {graphNode.weight.toFixed?.(2) || graphNode.weight}</div>
                             )}
                   </>
                 ) : (
-                          <div className="muted small">Click a node to drill down.</div>
-                )}
-              </div>
+                          <div className="muted small">Click a node to see details and related evidence.</div>
+                        )}
+                      </div>
                       <div className="card">
-                        <div className="card-title">Related evidence</div>
+                        <div className="card-title">Related evidence ({graphDrillEvidence.length})</div>
                         {graphDrillEvidence.length ? (
                           <div className="drill-list">
                             {graphDrillEvidence.slice(0, 50).map((ev) => (
@@ -1432,9 +2229,9 @@ function App() {
                                 <div className="pill-row">
                                   <Pill>{ev.evidence_type || "—"}</Pill>
                                   <Pill>{ev.evidence_direction || "—"}</Pill>
-            </div>
+                    </div>
                                 <div className="muted tiny ellipsis" title={ev.verbatim_quote || ""}>
-                                  “{ev.verbatim_quote || "No quote"}”
+                                  "{ev.verbatim_quote || "No quote"}"
                                 </div>
                             {ev.source_page_numbers && (
                               <div className="muted tiny">Pages: {ev.source_page_numbers}</div>
@@ -1456,9 +2253,9 @@ function App() {
                           </div>
                         ) : (
                           <div className="muted small">No related evidence.</div>
-                        )}
-                      </div>
-                    </div>
+                )}
+              </div>
+            </div>
                   </div>
                 ) : (
                   <div className="muted">
@@ -1507,4 +2304,12 @@ function App() {
   );
 }
 
-export default App;
+function AppWithErrorBoundary() {
+  return (
+    <ErrorBoundary>
+      <App />
+    </ErrorBoundary>
+  );
+}
+
+export default AppWithErrorBoundary;

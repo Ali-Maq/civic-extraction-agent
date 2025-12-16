@@ -1,0 +1,264 @@
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% SECTION 13: FIGURES (Main Text)
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% 
+% THREE FIGURES REQUIRED:
+%   - Figure 1: ReACT pipeline (for Results 2.2)
+%   - Figure 2: NL-to-SQL system (for Results 2.4)
+%   - Figure 3: Knowledge-enhanced interface (for Results 2.5)
+%
+% FILES NEEDED:
+%   - figure1.png
+%   - figure2.png
+%   - figure3.png
+%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\clearpage
+
+%%=============================================================%%
+%% FIGURE 1: ReACT EXTRACTION PIPELINE
+%%=============================================================%%
+
+\begin{figure}[p]
+\centering
+\includegraphics[width=\textwidth]{figure1.png}
+\caption{\textbf{ReACT-integrated extraction pipeline architecture.} The automated genomic variant extraction system from oncology literature using transparent reasoning chains. The pipeline processes PDF inputs through PyPDF2 parsing, applies ReACT-based reasoning (Reason, Action, Conclude, Think), and outputs CIViC-compatible evidence items with full provenance trails. Performance metrics show 2~PDFs/min processing rate, 97.5\% extraction accuracy, 1,300 items in dataset with 70/30 train/test split.}\label{fig1}
+\end{figure}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% FIGURE 1 DESIGN SPECIFICATIONS:
+%
+% FILENAME: figure1.png
+% REFERENCED IN: Results 2.2 (Automated variant extraction)
+%
+% VISUAL ELEMENTS REQUIRED:
+%
+% INPUT SECTION:
+%   □ PDF document icon/stack
+%   □ "Oncology Literature" label
+%   □ Arrow pointing to parsing
+%
+% PARSING SECTION:
+%   □ PyPDF2 module box
+%   □ omniOCR fallback notation
+%   □ Full-text extraction output
+%
+% ReACT REASONING SECTION (4 STEPS):
+%   □ REASON box: "Map information needs"
+%   □ ACTION box: "Extract from text"
+%   □ CONCLUDE box: "Draft structured answer"
+%   □ THINK box: "Validate and verify"
+%   □ Circular/sequential arrows between steps
+%   □ "Transparent reasoning traces" annotation
+%
+% VALIDATION SECTION:
+%   □ Four-layer validation stack:
+%     - Schema (Pydantic)
+%     - Field patterns (HGVS, PMID, NCT)
+%     - Cross-entity integrity
+%     - Clinical logic
+%   □ Confidence scoring component
+%   □ Human review routing for low-confidence
+%
+% OUTPUT SECTION:
+%   □ CIViC-compatible JSON structure
+%   □ Evidence items with provenance
+%   □ OncoCITE-KB database icon
+%
+% PERFORMANCE CALLOUTS (boxes/badges):
+%   □ "2 PDFs/min"
+%   □ "97.5% accuracy"
+%   □ "1,300 items"
+%   □ "70/30 split"
+%
+% COLOR SCHEME SUGGESTIONS:
+%   - Input: Blue
+%   - ReACT steps: Green gradient
+%   - Validation: Orange
+%   - Output: Purple
+%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\clearpage
+
+%%=============================================================%%
+%% FIGURE 2: NL-TO-SQL SYSTEM
+%%=============================================================%%
+
+\begin{figure}[p]
+\centering
+\includegraphics[width=\textwidth]{figure2.png}
+\caption{\textbf{Natural language to SQL query system architecture.} Domain-specific text-to-SQL translation using LoRA fine-tuning on synthetic training data. The system achieves 83.24\% execution accuracy across four complexity tiers (Simple: 5K pairs single-table; Medium: 5K pairs multi-join; Complex: 5K pairs aggregations; Super-Complex: 6K pairs nested subqueries) with consistent 6--7~second latency, representing a 28-point improvement over baseline (55\%).}\label{fig2}
+\end{figure}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% FIGURE 2 DESIGN SPECIFICATIONS:
+%
+% FILENAME: figure2.png
+% REFERENCED IN: Results 2.4 (NL-to-SQL interface)
+%
+% VISUAL ELEMENTS REQUIRED:
+%
+% TRAINING DATA GENERATION SECTION:
+%   □ Template expansion visualization
+%   □ CIViC entities being inserted
+%   □ "21,000 Q-SQL pairs" callout
+%
+% FOUR COMPLEXITY TIERS (stacked or side-by-side):
+%   □ Simple: 5K pairs
+%     - Single-table queries
+%     - Basic filtering icon
+%   □ Medium: 5K pairs
+%     - 2-3 table joins
+%     - JOIN diagram
+%   □ Complex: 5K pairs
+%     - Aggregations
+%     - SUM/COUNT icons
+%   □ Super-Complex: 6K pairs
+%     - Nested subqueries
+%     - Nested box diagram
+%
+% MODEL TRAINING SECTION:
+%   □ Llama-3 3B base model icon
+%   □ LoRA adapter visualization
+%   □ Fireworks AI platform badge
+%   □ "3 epochs" convergence indicator
+%   □ Training loss curve (optional)
+%
+% QUERY PROCESSING FLOW:
+%   □ Natural language input box
+%   □ Model processing
+%   □ SQL output box
+%   □ Database execution
+%   □ Results return
+%
+% PERFORMANCE COMPARISON:
+%   □ Bar chart or comparison table:
+%     - OncoCITE: 83.24%
+%     - Civic-SQL-Large: 55%
+%     - Llama-SQL: ~50%
+%   □ "28-point improvement" highlight
+%
+% PERFORMANCE CALLOUTS:
+%   □ "83.24% accuracy"
+%   □ "6-7 sec latency"
+%   □ "21K training pairs"
+%
+% COLOR SCHEME SUGGESTIONS:
+%   - Training: Blue
+%   - Tiers: Green gradient (simple→complex)
+%   - Model: Orange
+%   - Performance: Purple highlight
+%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\clearpage
+
+%%=============================================================%%
+%% FIGURE 3: KNOWLEDGE-ENHANCED INTERFACE
+%%=============================================================%%
+
+\begin{figure}[p]
+\centering
+\includegraphics[width=\textwidth]{figure3.png}
+\caption{\textbf{Knowledge-enhanced clinical interface architecture.} OncoCITE's intelligent query processing workflow with entity canonicalization and multi-step reasoning. The system improves overall query success from 76\% to 92\% and synonym/misspelling queries from 40\% to 90\%. The error recovery module achieves 80\% success through constraint relaxation, synonym substitution, intent reinterpretation, and query decomposition.}\label{fig3}
+\end{figure}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% FIGURE 3 DESIGN SPECIFICATIONS:
+%
+% FILENAME: figure3.png
+% REFERENCED IN: Results 2.5 (Knowledge-enhanced interface)
+%
+% VISUAL ELEMENTS REQUIRED:
+%
+% QUERY INPUT SECTION:
+%   □ Natural language query box
+%   □ Examples of messy input:
+%     - "HER1 mutation" (alias)
+%     - "breast ca" (abbreviation)
+%     - "herceptin" (brand name)
+%
+% FIVE COMPONENTS (labeled boxes):
+%
+%   1. KNOWLEDGE MANAGEMENT SYSTEM:
+%      □ Dictionary icons
+%      □ Gene aliases mapping (HER1→EGFR)
+%      □ Disease synonyms
+%      □ Therapy nomenclature
+%
+%   2. MULTI-STEP REASONING PIPELINE:
+%      □ Iterative flow diagram
+%      □ Four strategies listed:
+%        - Constraint relaxation
+%        - Synonym substitution
+%        - Intent reinterpretation
+%        - Query decomposition
+%
+%   3. ENHANCED DATABASE MANAGER:
+%      □ Query optimizer icon
+%      □ Failure analysis component
+%
+%   4. INTERACTIVE INTERFACE:
+%      □ Dialogue bubbles
+%      □ Collaborative refinement
+%
+%   5. TRANSPARENCY LAYER:
+%      □ Audit log icon
+%      □ Decision trail
+%
+% ENTITY CANONICALIZATION VISUALIZATION:
+%   □ Before/after examples:
+%     - HER1 → EGFR
+%     - breast cancer → mammary carcinoma (bidirectional)
+%     - trastuzumab ↔ Herceptin
+%   □ "<10ms" latency badge
+%
+% ERROR RECOVERY FLOW:
+%   □ Failed query → Recovery strategies → Success
+%   □ "80% recovery rate" callout
+%
+% CLINICAL INTERPRETATION OUTPUT:
+%   □ Hierarchical report structure:
+%     - Context summary
+%     - Key findings
+%     - Clinical relevance
+%     - Next steps
+%
+% PERFORMANCE CALLOUTS:
+%   □ "76% → 92% overall"
+%   □ "40% → 90% synonyms"
+%   □ "80% error recovery"
+%   □ "<10ms canonicalization"
+%
+% COLOR SCHEME SUGGESTIONS:
+%   - Input (messy): Red/orange
+%   - Canonicalization: Green
+%   - Components: Blue boxes
+%   - Output (clean): Purple
+%   - Performance improvements: Green arrows
+%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% GENERAL FIGURE REQUIREMENTS (Nature Portfolio):
+%
+% RESOLUTION: 300+ DPI
+% FORMAT: PNG, TIFF, or EPS
+% WIDTH: Full page (textwidth) recommended
+% 
+% FONT: Sans-serif (Arial, Helvetica)
+% FONT SIZE: Minimum 6pt after scaling
+%
+% LEGENDS: 
+%   - Bold title phrase
+%   - Detailed description in caption
+%   - All abbreviations defined
+%
+% ACCESSIBILITY:
+%   - Colorblind-friendly palette
+%   - Sufficient contrast
+%   - Text labels (not just color coding)
+%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%

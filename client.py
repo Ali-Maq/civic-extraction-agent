@@ -55,8 +55,15 @@ Read every page carefully and extract:
 ## CRITICAL RULES
 1. Extract ONLY what you see - no inference
 2. Be exhaustive with statistics - every number matters
-3. Tables are CRITICAL - extract all data
+3. Tables and Fiqures are CRITICAL - extract all data
 4. Note figure content and any visible statistics
+
+## ENTITY EXTRACTION PRECISION (CRITICAL)
+When extracting sentences that contain statistical tokens (p-values, HR, OR, CI, or "X% vs Y%"):
+- Copy the COMPLETE sentence(s) exactly as written, including ALL entities in that sentence.
+- Do NOT abbreviate entity names and do NOT truncate or use ellipsis (...) in quote-like fields.
+- If a statistic links X and Y, preserve the sentence structure so it is unambiguous.
+- If multiple entities appear near a statistic, include the sentence before/after for disambiguation.
 
 ## WORKFLOW
 1. Analyze all the page images provided in the user message.
@@ -159,6 +166,14 @@ Analyze the paper content (provided as TEXT) and create an extraction strategy.
 2. Analyze the content to identify extractable evidence
 3. Call save_extraction_plan with your analysis
 
+## HIGH-RISK STATISTICS TAGGING (CRITICAL)
+In your plan, list every candidate sentence/table row that contains stats tokens (p=, HR, OR, CI, %, vs).
+For each stat-bearing claim, record:
+- the EXACT entities linked to the statistic (gene/variant/disease/therapy names)
+- the exact statistic text (copy-paste)
+- where it appears (page / table / figure)
+Mark these as STAT_CRITICAL so Extractor uses full verbatim_quote and Critic does entity grounding.
+
 ## CRITICAL
 - Work ONLY from the text content returned by get_paper_content
 - Do NOT use training knowledge to fill gaps
@@ -181,12 +196,13 @@ Extract actionable clinical evidence from paper content (TEXT).
 ## REQUIRED CORE FIELDS (ALL MANDATORY)
 - feature_names (gene), variant_names, disease_name
 - evidence_type, evidence_level, evidence_direction, evidence_significance
-- evidence_description (1-3 sentences with stats)
+- evidence_description (detailed sentences with all important stats)
 
 ## REQUIRED CONTEXT FIELDS
 - source_page_numbers (e.g., "Page 3, Table 1")
-- verbatim_quote (exact sentence)
-- extraction_confidence (0.0–1.0)
+- verbatim_quote (EXACT text from paper; no ellipsis; no truncation; no paraphrase)
+- If quote is long (>500 chars), also fill quote_snippet for display
+- extraction_confidence (0.0-1.0)
 - extraction_reasoning (why actionable)
 
 ## EXTENDED FIELDS (FILL WHEN PRESENT IN TEXT OR READER)
@@ -198,7 +214,7 @@ Extract actionable clinical evidence from paper content (TEXT).
 - cohort_size (integer if stated)
 - source_title, source_publication_year, source_journal (reuse Reader metadata)
 - therapy_names mapped to trials when obvious (keep as text; do not invent)
-- IMPORTANT: Every evidence item must emit the SAME set of fields. If a field is unavailable, set it to null (do NOT omit). Lists must stay lists (["value"], not "value").
+- IMPORTANT: Every evidence item must emit the SAME set of fields (do NOT omit any). Lists must stay lists (["value"], not "value").
 
 ## WORKFLOW
 1. Call get_paper_content to get the text
@@ -212,6 +228,13 @@ Extract actionable clinical evidence from paper content (TEXT).
 - Reuse available metadata instead of inventing (title, journal, year, NCT IDs)
 - Include verbatim quotes from the text
 - Prefer structured values (HGVS, coords, NCT IDs) when present; otherwise leave blank
+
+## VERBATIM QUOTE RULES (CRITICAL)
+- verbatim_quote MUST be copied exactly from the paper content (copy-paste).
+- NO ellipsis (...), NO truncation, NO paraphrasing.
+- Entity grounding: every entity in evidence_description MUST appear in verbatim_quote.
+- Stats grounding: stats tokens in evidence_description must also appear in verbatim_quote.
+- If you need a short UI string, use quote_snippet but keep verbatim_quote complete.
 """,
     tools=[
         "mcp__civic_tools__get_paper_info",
@@ -235,16 +258,25 @@ Validate extracted evidence items against paper content (TEXT).
 ## VALIDATION CHECKLIST
 1. All required fields present
 2. Type-specific rules (PREDICTIVE needs therapy_names)
-3. Extended fields (HGVS c/p, coordinates, variant_origin, clinical_trial_nct_ids, cohort_size, cancer_cell_fraction) are kept when supported by text or Reader metadata; do not drop them.
+3. Extended fields are kept when supported by text/metadata; do not invent or drop supported fields.
 4. Statistics match the paper content
-5. Verbatim quotes appear in content
+5. Verbatim quotes appear in content AND are truly verbatim (no ellipsis, no truncation)
+6. Entity grounding: every entity mentioned in evidence_description appears in verbatim_quote
+7. Statistical attribution: for stats items, entities in evidence_description match verbatim_quote exactly
 
 ## WORKFLOW
 1. Call get_paper_content to get the text
 2. Call get_extraction_plan for context
 3. Call get_draft_extractions to see items
 4. Validate each item against the content
-5. If ANY item needs changes: call increment_iteration BEFORE save_critique, and tell the orchestrator to delegate back to the extractor for fixes.
+
+## STATISTICAL VALIDATION (CRITICAL)
+For items with stats tokens (p-value, HR, OR, CI, or "% vs %"):
+- verbatim_quote must contain the exact entities and the exact stats being asserted.
+- If evidence_description entities do not match verbatim_quote entities, mark NEEDS_REVISION.
+- If verbatim_quote contains ellipsis (...) or appears truncated, mark NEEDS_REVISION.
+
+5. If ANY item needs changes: call increment_iteration BEFORE saving critique; ask orchestrator to delegate back to extractor for fixes.
 6. Call save_critique with assessment
 
 ## OUTPUT
@@ -408,7 +440,7 @@ class CivicExtractionClient:
         if context.paper.pdf_path:
             images = self._load_images_from_pdf(context.paper.pdf_path)
         elif context.paper.page_images:
-            for img_path in context.paper.page_images[:20]:
+            for img_path in context.paper.page_images[:2]:
                 with open(img_path, "rb") as f:
                     data = base64.b64encode(f.read()).decode("utf-8")
                     images.append({
