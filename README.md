@@ -123,6 +123,12 @@ at **http://13.217.205.13** (EC2 `t4g.micro`, `us-east-1`). The
 instance is intended for reviewer access and is not a production
 service.
 
+## Manuscript snapshot
+
+The analyses reported in the manuscript correspond to release
+**`v1.0-preprint`**, commit
+[`e174841`](https://github.com/Ali-Maq/civic-extraction-agent/commit/e1748416374f5f0c43cf25ae28b64ee624a10d1a).
+
 ## Citation
 
 ```
