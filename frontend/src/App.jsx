@@ -15,7 +15,34 @@ import { buildKnowledgeGraphs } from "./knowledgeGraph";
 import { ClinicalMapView, MatrixView } from "./KnowledgeGraphViews";
 import LandingPage from "./LandingPage";
 
-// Error Boundary Component
+// Paper ID → human-readable citation. Raw folder IDs (DOIs, lab-named slugs)
+// are unreadable for reviewers; this maps them to "Author et al., Year
+// (Venue)" form. PMID folders are rendered as "PMID 12345678".
+const PAPER_CITATIONS = {
+  "s41591-023-02491-5":               { author: "Da Vià et al.",    year: 2023, venue: "Nature Medicine" },
+  "s43018-023-00625-9":               { author: "Derrien et al.",   year: 2023, venue: "Nature Cancer" },
+  "Dutta_et_al-2024-Blood_Neoplasia": { author: "Dutta et al.",     year: 2024, venue: "Blood Neoplasia" },
+  "Restrepo_et_al_selinexor":         { author: "Restrepo et al.",  year: 2022, venue: "JCO Precision Oncology" },
+  "Elnaggar_et_al":                   { author: "Elnaggar et al.",  year: 2022, venue: "J Hematol Oncol" },
+};
+
+const formatPaperTitle = (id) => {
+  if (!id) return "";
+  if (id.startsWith("PMID_")) return id.replace("PMID_", "PMID ");
+  const c = PAPER_CITATIONS[id];
+  return c ? `${c.author}, ${c.year}` : id;
+};
+
+const formatPaperVenue = (id) => {
+  if (!id) return "";
+  if (id.startsWith("PMID_")) return null;
+  const c = PAPER_CITATIONS[id];
+  return c ? c.venue : null;
+};
+
+// Error Boundary Component — graceful fallback instead of a scary red banner
+// when the PDF viewer or a child component throws transiently (common during
+// React 19 concurrent double-renders while the PDF.js worker is initializing).
 class ErrorBoundary extends Component {
   constructor(props) {
     super(props);
@@ -33,16 +60,45 @@ class ErrorBoundary extends Component {
 
   render() {
     if (this.state.hasError) {
+      const fallbackUrl = this.props.fallbackUrl;
       return (
-        <div style={{ padding: "20px", background: "#fee", border: "2px solid #f00", margin: "20px" }}>
-          <h2>Something went wrong!</h2>
-          <details style={{ whiteSpace: "pre-wrap" }}>
-            <summary>Error Details</summary>
-            {this.state.error && this.state.error.toString()}
-            <br />
-            {this.state.errorInfo && this.state.errorInfo.componentStack}
-          </details>
-          <button onClick={() => window.location.reload()}>Reload Page</button>
+        <div style={{
+          padding: "18px 16px",
+          background: "#fff8f1",
+          border: "1px solid #f3d9bf",
+          borderRadius: "8px",
+          margin: "8px",
+          fontSize: "13px",
+          lineHeight: "1.5",
+          color: "#3f2e1a",
+        }}>
+          <div style={{ fontWeight: 600, marginBottom: "6px" }}>
+            PDF viewer hiccup
+          </div>
+          <div className="muted small" style={{ marginBottom: "10px" }}>
+            This component recovered from a transient render error (often a React
+            concurrent double-render while PDF.js is initializing). The paper and
+            the extracted evidence are still available.
+          </div>
+          <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+            {fallbackUrl && (
+              <a className="pill link-pill" href={fallbackUrl} target="_blank" rel="noreferrer">
+                Open PDF in new tab
+              </a>
+            )}
+            <button
+              className="pill"
+              onClick={() => this.setState({ hasError: false, error: null, errorInfo: null })}
+            >
+              Retry
+            </button>
+            <button
+              className="pill"
+              onClick={() => window.location.reload()}
+            >
+              Reload workspace
+            </button>
+          </div>
         </div>
       );
     }
@@ -260,7 +316,7 @@ function PdfViewer({ url, onError }) {
         </a>
       </div>
       <div className="pdf-canvas">
-        <ErrorBoundary key={url}>
+        <ErrorBoundary key={url} fallbackUrl={url}>
           <Document
             key={url}
             file={{ url, httpHeaders: { Accept: "application/pdf" }, withCredentials: false }}
@@ -906,11 +962,140 @@ function DetailField({ label, value, ids, hgvs, rxnorm, ncit, efo, norm }) {
 }
 
 // Evidence Detail Panel Component
+// The 25 Tier-1 + 20 Tier-2 fields defined in Supp Tables S17 and S18.
+// Every one of these must be surfaced on the detail panel (populated
+// values shown verbatim, unpopulated values shown as "—") so a reviewer
+// can see the 45-field schema is complete, not just the subset that
+// happens to be non-empty for the selected item.
+const TIER1_SECTIONS = [
+  { title: "Core assertion (Tier-1 · 8)", fields: [
+    { key: "feature_names",          label: "Gene(s)" },
+    { key: "variant_names",          label: "Variant(s)" },
+    { key: "disease_name",           label: "Disease" },
+    { key: "evidence_type",          label: "Evidence type" },
+    { key: "evidence_level",         label: "Evidence level" },
+    { key: "evidence_direction",     label: "Evidence direction" },
+    { key: "evidence_significance",  label: "Significance" },
+    { key: "evidence_description",   label: "Description", long: true },
+  ]},
+  { title: "Variant (Tier-1 · 6)", fields: [
+    { key: "variant_origin",               label: "Variant origin" },
+    { key: "variant_type_names",           label: "Variant type" },
+    { key: "variant_hgvs_descriptions",    label: "HGVS" },
+    { key: "molecular_profile_name",       label: "Molecular profile" },
+    { key: "fusion_five_prime_gene_names", label: "Fusion — 5′ partner" },
+    { key: "fusion_three_prime_gene_names",label: "Fusion — 3′ partner" },
+  ]},
+  { title: "Feature (Tier-1 · 2)", fields: [
+    { key: "feature_full_names", label: "Feature full name" },
+    { key: "feature_types",      label: "Feature type" },
+  ]},
+  { title: "Disease, therapy, clinical trial, phenotype (Tier-1 · 6)", fields: [
+    { key: "disease_display_name",     label: "Disease (display name)" },
+    { key: "therapy_names",            label: "Therapy" },
+    { key: "therapy_interaction_type", label: "Therapy interaction type" },
+    { key: "clinical_trial_nct_ids",   label: "Clinical trial NCT ID(s)" },
+    { key: "clinical_trial_names",     label: "Clinical trial name(s)" },
+    { key: "phenotype_names",          label: "Phenotype(s)" },
+  ]},
+  { title: "Source (Tier-1 · 3)", fields: [
+    { key: "source_title",            label: "Source title", long: true },
+    { key: "source_publication_year", label: "Year" },
+    { key: "source_journal",          label: "Journal" },
+  ]},
+];
+
+const TIER2_SECTIONS = [
+  { title: "Ontology identifiers (Tier-2 · 5)", fields: [
+    { key: "disease_doid",        label: "DOID" },
+    { key: "gene_entrez_ids",     label: "Entrez gene ID(s)" },
+    { key: "therapy_ncit_ids",    label: "Therapy NCIt ID(s)" },
+    { key: "factor_ncit_ids",     label: "Factor NCIt ID(s)" },
+    { key: "variant_type_soids",  label: "Variant type SO ID(s)" },
+  ]},
+  { title: "Variant identifiers (Tier-2 · 4)", fields: [
+    { key: "variant_clinvar_ids",            label: "ClinVar accession" },
+    { key: "variant_allele_registry_ids",    label: "Allele registry ID" },
+    { key: "variant_mane_select_transcripts",label: "MANE Select transcript" },
+    { key: "variant_rsid",                   label: "dbSNP rsID" },
+  ]},
+  { title: "Phenotype identifiers (Tier-2 · 2)", fields: [
+    { key: "phenotype_ids",     label: "Phenotype ID(s)" },
+    { key: "phenotype_hpo_ids", label: "HPO ID(s)" },
+  ]},
+  { title: "Source identifiers (Tier-2 · 2)", fields: [
+    { key: "source_citation_id", label: "PMID",  aliases: ["pmid", "source_pmid"] },
+    { key: "source_pmcid",       label: "PMCID", aliases: ["pmcid"] },
+  ]},
+  { title: "Genomic coordinates (Tier-2 · 7)", fields: [
+    { key: "chromosome",               label: "Chromosome" },
+    { key: "start_position",           label: "Start position" },
+    { key: "stop_position",            label: "Stop position" },
+    { key: "reference_build",          label: "Reference build" },
+    { key: "representative_transcript",label: "Representative transcript" },
+    { key: "reference_bases",          label: "Reference bases" },
+    { key: "variant_bases",            label: "Variant bases" },
+  ]},
+];
+
+function renderFieldValue(item, field) {
+  const candidates = [field.key, ...(field.aliases || [])];
+  let v;
+  for (const k of candidates) {
+    if (item[k] !== undefined && item[k] !== null && item[k] !== "") { v = item[k]; break; }
+  }
+  if (v === undefined || v === null || v === "") return null;
+  if (Array.isArray(v)) {
+    const cleaned = v.filter(x => x !== null && x !== undefined && x !== "");
+    return cleaned.length ? cleaned.join(", ") : null;
+  }
+  return String(v);
+}
+
+function populatedCount(item, sections) {
+  let total = 0, filled = 0;
+  for (const s of sections) {
+    for (const f of s.fields) {
+      total += 1;
+      if (renderFieldValue(item, f) !== null) filled += 1;
+    }
+  }
+  return { filled, total };
+}
+
+function FieldRow({ label, value }) {
+  return (
+    <div className="id-row" style={{ padding: "4px 0" }}>
+      <span className="label-tiny" style={{ minWidth: 190 }}>{label}:</span>
+      <span className="value-tiny" style={{ color: value === null ? "#94a3b8" : "#1f2937" }}>
+        {value === null ? "—" : value}
+      </span>
+    </div>
+  );
+}
+
+function SchemaSection({ item, section }) {
+  return (
+    <div className="detail-section">
+      <h4>{section.title}</h4>
+      <div className="id-list">
+        {section.fields.map((f) => {
+          const v = renderFieldValue(item, f);
+          return <FieldRow key={f.key} label={f.label} value={v} />;
+        })}
+      </div>
+    </div>
+  );
+}
+
 function EvidenceDetailPanel({ item }) {
   const renderStars = (rating) => {
     if (!rating) return null;
     return "★".repeat(rating) + "☆".repeat(5 - rating);
   };
+
+  const t1 = populatedCount(item, TIER1_SECTIONS);
+  const t2 = populatedCount(item, TIER2_SECTIONS);
 
   return (
     <div className="detail-panel">
@@ -918,7 +1103,7 @@ function EvidenceDetailPanel({ item }) {
       {item.evidence_description && (
         <div className="detail-section" style={{ background: '#f8fafc', padding: '14px', borderRadius: '8px', marginBottom: '16px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-            <h4 style={{ margin: 0 }}>Evidence Summary</h4>
+            <h4 style={{ margin: 0 }}>Evidence summary</h4>
             {item.evidence_rating && (
               <div style={{ color: '#f59e0b', fontSize: '16px', letterSpacing: '2px' }}>
                 {renderStars(item.evidence_rating)}
@@ -931,204 +1116,69 @@ function EvidenceDetailPanel({ item }) {
         </div>
       )}
 
-      {/* Publication Source */}
-      {(item.source_title || item.source_journal) && (
-        <div className="detail-section" style={{ background: '#eef2ff', padding: '10px 12px', borderRadius: '6px', marginBottom: '14px' }}>
-          {item.source_title && (
-            <div style={{ fontWeight: 600, fontSize: '0.875rem', marginBottom: '4px' }}>{item.source_title}</div>
-          )}
-          <div style={{ fontSize: '0.8125rem', color: '#64748b' }}>
-            {item.source_journal && <span>{item.source_journal}</span>}
-            {item.source_publication_year && <span> ({item.source_publication_year})</span>}
-            {item.pmcid && <span> • PMCID: {item.pmcid}</span>}
-          </div>
-        </div>
-      )}
-
-      {/* Confidence & Direction */}
+      {/* 45-field schema coverage pill strip */}
       <div style={{ display: 'flex', gap: '8px', marginBottom: '14px', flexWrap: 'wrap' }}>
+        <Pill kind="default">Tier-1: {t1.filled}/{t1.total} fields populated</Pill>
+        <Pill kind="default">Tier-2: {t2.filled}/{t2.total} fields populated</Pill>
         {typeof item.extraction_confidence === 'number' && (
           <Pill kind={item.extraction_confidence >= 0.9 ? 'success' : item.extraction_confidence >= 0.75 ? 'default' : 'warning'}>
             Confidence: {Math.round(item.extraction_confidence * 100)}%
           </Pill>
         )}
-        {item.evidence_direction && (
-          <Pill kind="default">Direction: {item.evidence_direction}</Pill>
-        )}
-        {item.variant_origin && (
-          <Pill kind="default">{item.variant_origin}</Pill>
-        )}
       </div>
 
-      {/* Verbatim Quote */}
+      {/* Verbatim Quote — grounding evidence */}
       <div className="detail-section">
-        <h4>Quote from Source</h4>
+        <h4>Verbatim quote from source</h4>
         <div className="quote-box">
           "{item.verbatim_quote || "No quote available"}"
         </div>
         {item.source_page_numbers && (
-          <div className="muted tiny" style={{ marginTop: '6px' }}>Source: {item.source_page_numbers}</div>
+          <div className="muted tiny" style={{ marginTop: '6px' }}>Source location: {item.source_page_numbers}</div>
         )}
       </div>
 
-      {/* Extraction Reasoning */}
-      <div className="detail-section">
-        <h4>Extraction Reasoning</h4>
-        <p className="muted small" style={{ lineHeight: '1.6' }}>
-          {item.extraction_reasoning || "No reasoning provided"}
-        </p>
-      </div>
-
-      {/* Clinical Data */}
-      <div className="detail-section">
-        <h4>Clinical Data</h4>
-        <div className="detail-grid">
-          <DetailField
-            label="Gene"
-            value={item.feature_names?.join(", ")}
-            ids={item.gene_entrez_ids || item.feature_entrez_ids}
-          />
-          <DetailField
-            label="Variant"
-            value={item.variant_names?.join(", ")}
-            hgvs={item.variant_hgvs_descriptions}
-          />
-          {(item.variant_hgvs_c || item.variant_hgvs_p) && (
-            <DetailField
-              label="HGVS Notation"
-              value={[item.variant_hgvs_c, item.variant_hgvs_p].filter(Boolean).join(" / ")}
-            />
-          )}
-          {item.therapy_names && (
-            <DetailField
-              label="Therapy"
-              value={item.therapy_names.join(", ")}
-              rxnorm={item.therapy_rxnorm_ids}
-              ncit={item.therapy_ncit_ids}
-            />
-          )}
-          <DetailField
-            label="Disease"
-            value={item.disease_name}
-            efo={item.disease_efo_id}
-          />
-          {item.related_disease_efo_id && (
-            <DetailField
-              label="Related Disease"
-              value="See EFO ID"
-              efo={item.related_disease_efo_id}
-            />
-          )}
-        </div>
-      </div>
-
-      {/* Evidence Classification */}
-      <div className="detail-section">
-        <h4>Evidence Classification</h4>
-        <div className="detail-grid">
-          <DetailField
-            label="Evidence Type"
-            value={item.evidence_type}
-            norm={item.evidence_type_norm}
-          />
-          <DetailField
-            label="Evidence Level"
-            value={item.evidence_level}
-            norm={item.evidence_level_norm}
-          />
-          <DetailField
-            label="Significance"
-            value={item.evidence_significance}
-            norm={item.evidence_significance_norm}
-          />
-          {item.evidence_direction && (
-            <DetailField
-              label="Direction"
-              value={item.evidence_direction}
-            />
-          )}
-        </div>
-      </div>
-
-      {/* Genomic Coordinates */}
-      {(item.chromosome || item.start_position || item.stop_position || item.reference_build) && (
+      {/* Extraction Reasoning (system-level, not in S17/S18) */}
+      {item.extraction_reasoning && (
         <div className="detail-section">
-          <h4>Genomic Coordinates</h4>
-          <div className="detail-grid">
-            {item.chromosome && <DetailField label="Chromosome" value={item.chromosome} />}
-            {item.start_position && <DetailField label="Start Position" value={item.start_position} />}
-            {item.stop_position && <DetailField label="Stop Position" value={item.stop_position} />}
-            {item.reference_build && <DetailField label="Reference Build" value={item.reference_build} />}
-          </div>
+          <h4>Extraction reasoning</h4>
+          <p className="muted small" style={{ lineHeight: '1.6' }}>
+            {item.extraction_reasoning}
+          </p>
         </div>
       )}
 
-      {/* Database IDs */}
-      <div className="detail-section">
-        <h4>Database Identifiers</h4>
-        <div className="id-list">
-          {(item.gene_entrez_ids || item.feature_entrez_ids)?.length > 0 && (
-            <div className="id-row">
-              <span className="label-tiny">Entrez Gene:</span>
-              <span className="value-tiny">{(item.gene_entrez_ids || item.feature_entrez_ids).join(", ")}</span>
-            </div>
-          )}
-          {item.therapy_rxnorm_ids?.length > 0 && (
-            <div className="id-row">
-              <span className="label-tiny">RxNorm:</span>
-              <span className="value-tiny">{item.therapy_rxnorm_ids.join(", ")}</span>
-            </div>
-          )}
-          {item.therapy_ncit_ids?.length > 0 && (
-            <div className="id-row">
-              <span className="label-tiny">NCIt:</span>
-              <span className="value-tiny">{item.therapy_ncit_ids.join(", ")}</span>
-            </div>
-          )}
-          {item.disease_efo_id && (
-            <div className="id-row">
-              <span className="label-tiny">Disease EFO:</span>
-              <span className="value-tiny">{item.disease_efo_id}</span>
-            </div>
-          )}
-          {item.related_disease_efo_id && (
-            <div className="id-row">
-              <span className="label-tiny">Related Disease EFO:</span>
-              <span className="value-tiny">{item.related_disease_efo_id}</span>
-            </div>
-          )}
-        </div>
+      {/* 25 Tier-1 fields per Supp Table S17 */}
+      <div style={{ background: '#f0f9ff', padding: '8px 10px', borderRadius: '6px', marginBottom: '8px' }}>
+        <strong style={{ fontSize: '0.8125rem', color: '#0369a1' }}>
+          Tier-1 · extraction fields (Supplementary Table S17) — {t1.filled}/{t1.total} populated
+        </strong>
       </div>
+      {TIER1_SECTIONS.map((s) => <SchemaSection key={s.title} item={item} section={s} />)}
 
-      {/* Study Details */}
-      {(item.cohort_size || item.cancer_cell_fraction || item.clinical_trial_nct_ids) && (
-        <div className="detail-section">
-          <h4>Study Details</h4>
-          {item.cohort_size && (
-            <div className="muted small" style={{ marginBottom: '4px' }}>
-              <strong>Cohort Size:</strong> {item.cohort_size} patients
-            </div>
-          )}
-          {item.cancer_cell_fraction && (
-            <div className="muted small" style={{ marginBottom: '4px' }}>
-              <strong>Cancer Cell Fraction:</strong> {item.cancer_cell_fraction}
-            </div>
-          )}
-          {item.clinical_trial_nct_ids && (
-            <div className="muted small">
-              <strong>Clinical Trials:</strong> {item.clinical_trial_nct_ids}
-            </div>
-          )}
-        </div>
-      )}
+      {/* 20 Tier-2 fields per Supp Table S18 */}
+      <div style={{ background: '#f0fdf4', padding: '8px 10px', borderRadius: '6px', marginTop: '12px', marginBottom: '8px' }}>
+        <strong style={{ fontSize: '0.8125rem', color: '#15803d' }}>
+          Tier-2 · normalization fields (Supplementary Table S18) — {t2.filled}/{t2.total} populated
+        </strong>
+      </div>
+      {TIER2_SECTIONS.map((s) => <SchemaSection key={s.title} item={item} section={s} />)}
     </div>
   );
 }
 
 // Evidence Split-Pane Component
 function EvidenceSplitPane({ items, pdfUrl, filters, onFilterChange }) {
+  // Default to first evidence item selected and PDF context pane open, so a
+  // reviewer landing on the page sees the full system in one view without
+  // needing to click through multiple UI states.
   const [selectedEvidence, setSelectedEvidence] = useState(null);
-  const [showPdfPane, setShowPdfPane] = useState(false);
+  const [showPdfPane, setShowPdfPane] = useState(true);
+  useEffect(() => {
+    if (!selectedEvidence && items && items.length > 0) {
+      setSelectedEvidence(items[0]);
+    }
+  }, [items, selectedEvidence]);
 
   return (
     <div className="split-pane-container">
@@ -1199,6 +1249,11 @@ function EvidenceSplitPane({ items, pdfUrl, filters, onFilterChange }) {
 }
 
 function App() {
+  // Landing page is shown first so reviewers clicking the paper's demo URL
+  // see the OncoCITE title card (paper, authors, DOI) before entering the
+  // workspace. A single click on "Get Started" takes them to the three-pane
+  // view with a paper pre-selected, PDF pane already open, and the first
+  // evidence item highlighted — so the workspace is fully loaded on arrival.
   const [showLanding, setShowLanding] = useState(true);
   const [papers, setPapers] = useState([]);
   const [selected, setSelected] = useState(null);
@@ -1220,7 +1275,10 @@ function App() {
   const [error, setError] = useState("");
   const [jsonModal, setJsonModal] = useState({ open: false, title: "", data: null });
   const [activeTab, setActiveTab] = useState("insights");
-  const [insightsSubTab, setInsightsSubTab] = useState("overview");
+  // Default to the Evidence sub-tab so reviewers land on the split-pane view
+  // (evidence list + PDF context side-by-side) — the canonical "see everything"
+  // state shown in the paper's Supplementary Figure S3.
+  const [insightsSubTab, setInsightsSubTab] = useState("evidence");
   const [kgView, setKgView] = useState("clinical"); // clinical, matrix
   const [viewMode, setViewMode] = useState("table");
   const [evidenceTypeFilter, setEvidenceTypeFilter] = useState("ALL");
@@ -1757,10 +1815,10 @@ function App() {
           )}
         </div>
 
-        <h2>Myeloma Evidence Papers</h2>
+        <h2>Corpus</h2>
         <div className="paper-list">
           {papers.filter((p) => p.id.startsWith("PMID_")).length > 0 && (
-            <div className="section-label">CIViC PMIDs (with ground truth)</div>
+            <div className="section-label">Retrospective — CIViC curated</div>
           )}
           {papers
             .filter((p) => p.id.startsWith("PMID_"))
@@ -1770,29 +1828,32 @@ function App() {
                 className={`paper-btn ${selected === p.id ? "active" : ""}`}
                 onClick={() => { console.log("[Paper] Selected:", p.id); setSelected(p.id); }}
               >
-                <div className="paper-title">{p.id.replace("PMID_", "PMID ")}</div>
+                <div className="paper-title">{formatPaperTitle(p.id)}</div>
                 <div className="paper-meta">
                   CIViC · {p.hasOutput ? "✅ Output" : "…"} · {p.hasCheckpoints ? "💾 Checkpoints" : "…"}
                 </div>
               </button>
             ))}
           {papers.filter((p) => !p.id.startsWith("PMID_")).length > 0 && (
-            <div className="section-label">New Papers (beyond CIViC)</div>
+            <div className="section-label">Prospective — recent literature</div>
           )}
           {papers
             .filter((p) => !p.id.startsWith("PMID_"))
-            .map((p) => (
-            <button
-              key={p.id}
-              className={`paper-btn ${selected === p.id ? "active" : ""}`}
-              onClick={() => { console.log("[Paper] Selected:", p.id); setSelected(p.id); }}
-            >
-              <div className="paper-title">{p.id}</div>
-              <div className="paper-meta">
-                  New · {p.hasOutput ? "✅ Output" : "…"} · {p.hasCheckpoints ? "💾 Checkpoints" : "…"}
-              </div>
-            </button>
-          ))}
+            .map((p) => {
+              const venue = formatPaperVenue(p.id);
+              return (
+                <button
+                  key={p.id}
+                  className={`paper-btn ${selected === p.id ? "active" : ""}`}
+                  onClick={() => { console.log("[Paper] Selected:", p.id); setSelected(p.id); }}
+                >
+                  <div className="paper-title">{formatPaperTitle(p.id)}</div>
+                  <div className="paper-meta">
+                    {venue ? `${venue} · ` : ""}{p.hasOutput ? "✅ Output" : "…"} · {p.hasCheckpoints ? "💾 Checkpoints" : "…"}
+                  </div>
+                </button>
+              );
+            })}
           {!papers.length && <div className="muted">No papers found.</div>}
         </div>
       </aside>
@@ -1800,12 +1861,11 @@ function App() {
       <main className="main">
         <header className="header">
           <div>
-            <h1>Reader-First Multi-Agent Evidence Extraction System</h1>
+            <h1>OncoCITE — Clinical genomic evidence extraction</h1>
             <p className="muted">
-              Multiple Myeloma validation corpus: 10 CIViC baseline papers + 5 additional papers demonstrating
-              <strong> 81.8% superiority over manual curation</strong> (60 vs 33 items, p&lt;0.001, Cohen's d=1.31)
+              Multiple myeloma validation corpus: 10 CIViC-curated papers (retrospective)
+              and 5 recent papers (prospective).
             </p>
-            <p className="muted small">Four-Phase Architecture: 01 Reader → 02 Planner → 03 Extractor-Critic → 04 Normalizer</p>
           </div>
           <div className="header-pills">
             {loading && <Pill>Loading…</Pill>}
@@ -1819,16 +1879,16 @@ function App() {
           <div className="content">
             <div className="tab-bar">
               <button className={`tab-btn ${activeTab === "pdf" ? "active" : ""}`} onClick={() => { console.log("[Tab] Switching to: pdf"); setActiveTab("pdf"); }}>
-                📄 Original PDF
+                📄 Source PDF
               </button>
               <button className={`tab-btn ${activeTab === "insights" ? "active" : ""}`} onClick={() => { console.log("[Tab] Switching to: insights"); setActiveTab("insights"); }}>
-                📊 Insights
+                📊 Extracted evidence
               </button>
             </div>
 
             {activeTab === "pdf" && (
               <div className="pane">
-                <SectionHeader title="Original PDF" />
+                <SectionHeader title="Source PDF" />
                 {currentPaper?.pdfPath && (
                   <div className="muted small">Resolved path: {currentPaper.pdfPath}</div>
                 )}
@@ -1840,11 +1900,11 @@ function App() {
               <div className="pane">
                 <div className="sub-tab-bar">
                   <button className={`sub-tab-btn ${insightsSubTab === "overview" ? "active" : ""}`}
-                          onClick={() => setInsightsSubTab("overview")}>Overview</button>
+                          onClick={() => setInsightsSubTab("overview")}>Summary</button>
                   <button className={`sub-tab-btn ${insightsSubTab === "evidence" ? "active" : ""}`}
-                          onClick={() => setInsightsSubTab("evidence")}>Evidence</button>
+                          onClick={() => setInsightsSubTab("evidence")}>Evidence items</button>
                   <button className={`sub-tab-btn ${insightsSubTab === "matrix" ? "active" : ""}`}
-                          onClick={() => setInsightsSubTab("matrix")}>Matrix</button>
+                          onClick={() => setInsightsSubTab("matrix")}>Knowledge graph</button>
                   <button className={`sub-tab-btn ${insightsSubTab === "provenance" ? "active" : ""}`}
                           onClick={() => setInsightsSubTab("provenance")}>Provenance</button>
                 </div>
@@ -1921,13 +1981,13 @@ function App() {
                     className={`kg-view-btn ${kgView === 'clinical' ? 'active' : ''}`}
                     onClick={() => setKgView('clinical')}
                   >
-                    🔬 Clinical Map
+                    🔬 Entity graph
                   </button>
                   <button
                     className={`kg-view-btn ${kgView === 'matrix' ? 'active' : ''}`}
                     onClick={() => setKgView('matrix')}
                   >
-                    📊 Evidence Matrix
+                    📊 Feature × therapy matrix
                   </button>
 
                   {/* Stats summary */}
