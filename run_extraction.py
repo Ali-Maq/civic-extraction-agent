@@ -29,6 +29,16 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 # Re-use the full pipeline entry point already shipped under scripts/
 from scripts.run_extraction import run_extraction as _run_extraction  # noqa: E402
 
+# Normalizer stage (paper Sec 2.2 / 2.4) — runs as a deterministic
+# post-processor after the multi-agent extraction completes. Uses the
+# same MyGene / MyVariant / OLS / RxNorm endpoints documented in
+# Supplementary Table S21.
+try:
+    from scripts.enrich_extractions import enrich_output_sync  # noqa: E402
+    _ENRICHMENT_AVAILABLE = True
+except Exception:
+    _ENRICHMENT_AVAILABLE = False
+
 
 def main() -> int:
     parser = argparse.ArgumentParser(
@@ -112,6 +122,27 @@ def main() -> int:
         "duration_seconds": duration,
         "extraction": result,
     }
+
+    # Normalizer stage — populate Tier-2 ontology identifiers and the
+    # mechanically-derivable Tier-1 fields via external REST lookups.
+    # Always runs after extraction, regardless of the Critic's approval
+    # state, so Supplementary Table S18 fields (disease_doid,
+    # gene_entrez_ids, therapy_ncit_ids, etc.) are populated as
+    # documented in the manuscript.
+    if _ENRICHMENT_AVAILABLE:
+        try:
+            stats = enrich_output_sync(payload, paper_id)
+            payload["_normalizer_stats"] = stats
+            if verbose:
+                print(
+                    f"[Normalizer] enriched {stats.get('items', 0)} items, "
+                    f"+{stats.get('delta', 0)} field values populated via "
+                    f"MyGene / MyVariant / OLS / RxNorm (Supp Table S21)"
+                )
+        except Exception as exc:
+            if verbose:
+                print(f"[Normalizer] enrichment skipped ({exc})")
+
     final_path.write_text(json.dumps(payload, indent=2, default=str))
 
     items = (
