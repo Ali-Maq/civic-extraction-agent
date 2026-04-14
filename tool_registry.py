@@ -44,6 +44,12 @@ from tools.normalization_tools import (
     lookup_hpo,
     lookup_pmcid,
 )
+from tools.workflow_tools import (
+    get_workflow_status,
+    log_agent_action,
+    save_checkpoint,
+    restore_checkpoint,
+)
 
 
 def build_civic_mcp_server():
@@ -77,6 +83,11 @@ def build_civic_mcp_server():
             lookup_clinical_trial,
             lookup_hpo,
             lookup_pmcid,
+            # Workflow management tools (Supp Table S15)
+            get_workflow_status,
+            log_agent_action,
+            save_checkpoint,
+            restore_checkpoint,
         ],
     )
 
