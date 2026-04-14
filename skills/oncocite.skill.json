@@ -20,10 +20,7 @@
   },
   "mcp_server": {
     "transport": "stdio",
-    "note": "The MCP server is provisioned automatically by the Claude Agent SDK via tool_registry.create_sdk_mcp_server() when CivicExtractionClient is constructed. External MCP-compatible clients can attach by spawning the client module directly.",
-    "command": "python",
-    "args": ["-m", "client"],
-    "cwd_env": "ONCOCITE_REPO_ROOT"
+    "note": "The 22-tool MCP server is declared in tool_registry.build_civic_mcp_server() and provisioned by the Claude Agent SDK when CivicExtractionClient is constructed. To launch a standalone MCP server for external clients, call build_civic_mcp_server() from a small wrapper script — the server object is a stdio-capable SDK MCP server."
   },
   "tools": [
     {"name": "save_paper_content", "agent": "Reader", "purpose": "Persist extracted paper content."},
