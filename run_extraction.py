@@ -114,7 +114,12 @@ def main() -> int:
     }
     final_path.write_text(json.dumps(payload, indent=2, default=str))
 
-    items = (result or {}).get("final_extractions") or (result or {}).get("evidence_items") or []
+    items = (
+        (result or {}).get("final_extractions")
+        or (result or {}).get("evidence_items")
+        or (result or {}).get("draft_extractions")
+        or []
+    )
     print()
     print(f"Done in {duration:.1f}s — {len(items)} evidence items → {final_path}")
     return 0
