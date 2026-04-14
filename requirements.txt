@@ -1,0 +1,12 @@
+# Pinned dependencies for the Claude Agent SDK implementation of OncoCITE.
+# Generated to match the deterministic inference settings documented in
+# Supplementary Note S3.4 of the manuscript.
+
+pandas>=2.0.0
+openpyxl>=3.1.0
+pydantic>=2.0.0
+requests>=2.31.0
+python-dotenv>=1.0.0
+claude-agent-sdk==0.1.14
+PyMuPDF>=1.23.0
+mcp>=1.0.0

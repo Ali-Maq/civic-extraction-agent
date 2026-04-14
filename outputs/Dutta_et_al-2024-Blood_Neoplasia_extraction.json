@@ -616,5 +616,5 @@
     "end": "2025-12-13T00:13:10.670515",
     "seconds": 861.340422
   },
-  "log_file": "/Users/ali/Downloads/civic/civic_extraction_end_to_end/logs/Dutta_et_al-2024-Blood_Neoplasia_20251212_235849.log"
+  "log_file": "/app/logs"
 }

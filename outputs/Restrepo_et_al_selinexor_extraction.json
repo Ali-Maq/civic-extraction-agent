@@ -465,5 +465,5 @@
     "end": "2025-12-12T13:16:23.879645",
     "seconds": 781.150603
   },
-  "log_file": "/Users/ali/Downloads/civic/civic_extraction_end_to_end/logs/Restrepo_et_al_selinexor_20251212_130322.log"
+  "log_file": "/app/logs"
 }

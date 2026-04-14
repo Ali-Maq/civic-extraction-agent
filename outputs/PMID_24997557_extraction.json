@@ -249,5 +249,5 @@
     "end": "2025-12-15T02:21:03.696890",
     "seconds": 572.28911
   },
-  "log_file": "/Users/ali/Downloads/civic/civic_extraction_end_to_end/logs/PMID_24997557_20251215_021131.log"
+  "log_file": "/app/logs"
 }

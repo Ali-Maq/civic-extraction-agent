@@ -1,7 +1,0 @@
-config
-context
-hooks
-normalization
-schemas
-scripts
-tools

@@ -1494,7 +1494,7 @@ function App() {
 
   const groundTruthPath =
     selected && selected.startsWith("PMID_")
-      ? `/Users/ali/Downloads/civic/civic_data_analysis/ground_truth/${selected}_ground_truth.json`
+      ? `/api/papers/${selected}/ground-truth`
       : null;
   const graphEvidence = useMemo(() => {
     const term = graphFilters.search.trim().toLowerCase();

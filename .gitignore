@@ -1,17 +1,40 @@
-__pycache__/
-*.pyc
-.DS_Store
-.venv/
-.venv311/
+# Environment
 .env
+.env.local
+.venv/
+venv/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+
+# Testing / coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Node
+node_modules/
+frontend/dist/
+frontend/.vite/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Runtime outputs (large, regenerated per run)
 logs/
 *.log
-Final_Dataset_Civic/
-data_download_papers_strategies/downloaded_papers/
-data_download_papers_strategies/downloaded_papers_elsevier_api/
-data_download_papers_strategies/downloaded_papers_remaining/
-data_download_papers_strategies/institutional_papers/
-data_download_papers_strategies/pmc_papers/
-failed_paper_manual_download/
-.cursor/
 
+# Data files too large for git
+data/ground_truth/*.xlsx

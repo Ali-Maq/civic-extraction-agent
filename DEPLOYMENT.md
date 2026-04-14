@@ -7,7 +7,7 @@
 - Instance ID: i-0df08d1a01b9e8f62
 - Instance Type: t4g.micro (ARM64)
 - Region: us-east-1
-- ECR: 114288741360.dkr.ecr.us-east-1.amazonaws.com/civic-extraction
+- ECR: AWS_ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/civic-extraction
 
 ---
 
@@ -19,17 +19,17 @@ cd frontend && npm run build && cd ..
 
 # 2. Build and push Docker image
 docker build --platform linux/arm64 -t civic-extraction:latest .
-aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin 114288741360.dkr.ecr.us-east-1.amazonaws.com
-docker tag civic-extraction:latest 114288741360.dkr.ecr.us-east-1.amazonaws.com/civic-extraction:latest
-docker push 114288741360.dkr.ecr.us-east-1.amazonaws.com/civic-extraction:latest
+aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin AWS_ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com
+docker tag civic-extraction:latest AWS_ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/civic-extraction:latest
+docker push AWS_ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/civic-extraction:latest
 
 # 3. Update on EC2
 ssh -i civic-extraction-key.pem ec2-user@13.217.205.13 << 'EOF'
-aws ecr get-login-password --region us-east-1 | sudo docker login --username AWS --password-stdin 114288741360.dkr.ecr.us-east-1.amazonaws.com
-sudo docker pull 114288741360.dkr.ecr.us-east-1.amazonaws.com/civic-extraction:latest
+aws ecr get-login-password --region us-east-1 | sudo docker login --username AWS --password-stdin AWS_ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com
+sudo docker pull AWS_ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/civic-extraction:latest
 sudo docker stop civic-extraction
 sudo docker rm civic-extraction
-sudo docker run -d --name civic-extraction -p 80:80 --restart unless-stopped -v /opt/civic-logs:/app/logs 114288741360.dkr.ecr.us-east-1.amazonaws.com/civic-extraction:latest
+sudo docker run -d --name civic-extraction -p 80:80 --restart unless-stopped -v /opt/civic-logs:/app/logs AWS_ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/civic-extraction:latest
 EOF
 ```
 
@@ -205,7 +205,7 @@ sudo docker ps -a | grep civic
 # Manually restart
 sudo docker stop civic-extraction
 sudo docker rm civic-extraction
-sudo docker run -d --name civic-extraction -p 80:80 --restart unless-stopped -v /opt/civic-logs:/app/logs 114288741360.dkr.ecr.us-east-1.amazonaws.com/civic-extraction:latest
+sudo docker run -d --name civic-extraction -p 80:80 --restart unless-stopped -v /opt/civic-logs:/app/logs AWS_ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/civic-extraction:latest
 ```
 
 ### API Not Responding

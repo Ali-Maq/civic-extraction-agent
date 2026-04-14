@@ -1,209 +1,137 @@
-# CIViC Evidence Extraction System
+# OncoCITE — Claude Agent SDK implementation
 
-Multi-agent genomic evidence extraction pipeline with interactive web interface.
+Companion code for the OncoCITE manuscript (Research Square preprint,
+[DOI 10.21203/rs.3.rs-9160944/v1](https://doi.org/10.21203/rs.3.rs-9160944/v1)):
+a multi-agent AI system for source-grounded extraction and harmonization
+of clinical genomic evidence from full-text oncology publications.
 
----
-
-## Quick Start (Local Docker)
-
-```bash
-# 1. Build and run
-docker compose up -d
-
-# 2. Visit
-http://localhost:8080
-
-# 3. Stop
-docker compose down
-```
-
----
-
-## AWS Deployment
-
-**Current Live Instance:**
-- URL: http://13.217.205.13
-- Instance: i-0df08d1a01b9e8f62 (t4g.micro, us-east-1)
-- Status: ✅ Running
-
-**Update Deployment:**
-```bash
-# 1. Build frontend
-cd frontend
-npm run build
-
-# 2. Build Docker image
-cd ..
-docker build --platform linux/arm64 -t civic-extraction:latest .
-
-# 3. Push to ECR
-aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin 114288741360.dkr.ecr.us-east-1.amazonaws.com
-docker tag civic-extraction:latest 114288741360.dkr.ecr.us-east-1.amazonaws.com/civic-extraction:latest
-docker push 114288741360.dkr.ecr.us-east-1.amazonaws.com/civic-extraction:latest
-
-# 4. SSH to EC2 and restart
-ssh -i civic-extraction-key.pem ec2-user@13.217.205.13
-aws ecr get-login-password --region us-east-1 | sudo docker login --username AWS --password-stdin 114288741360.dkr.ecr.us-east-1.amazonaws.com
-sudo docker pull 114288741360.dkr.ecr.us-east-1.amazonaws.com/civic-extraction:latest
-sudo docker stop civic-extraction
-sudo docker rm civic-extraction
-sudo docker run -d --name civic-extraction -p 80:80 --restart unless-stopped -v /opt/civic-logs:/app/logs 114288741360.dkr.ecr.us-east-1.amazonaws.com/civic-extraction:latest
-```
-
----
-
-## System Architecture
-
-```
-Internet → AWS EC2 (13.217.205.13)
-              ↓
-          Docker Container
-              ├── Nginx (Port 80)
-              │   ├── Frontend (React + PDF.js)
-              │   └── Reverse Proxy → API
-              └── Express API (Port 4177)
-                  ├── /api/papers
-                  ├── /api/papers/:id/pdf
-                  └── /api/papers/:id/extractions
-```
-
----
-
-## Project Structure
-
-```
-civic_extraction_end_to_end/
-├── Dockerfile                    # Docker image definition
-├── docker-compose.yml            # Local development
-├── deployment/
-│   ├── docker-entrypoint.sh      # Container startup
-│   └── nginx-docker.conf         # Web server config
-├── frontend/
-│   ├── dist/                     # Built frontend
-│   ├── server/production.cjs     # API server (Range requests)
-│   └── src/                      # React source code
-├── data/papers/                  # PDF files
-└── outputs/                      # Extraction results
-```
-
----
-
-## Development
-
-### Frontend Development
-```bash
-cd frontend
-npm install
-npm run dev          # Dev server on localhost:5173
-npm run build        # Production build
-```
-
-### Backend API
-```bash
-cd frontend
-node server/production.cjs    # API on localhost:4177
-```
-
-### Docker Testing
-```bash
-# Build and run
-docker compose up -d
-
-# View logs
-docker compose logs -f
-
-# Restart
-docker compose restart
-
-# Stop and remove
-docker compose down
-```
-
----
-
-## Troubleshooting
-
-### Local Docker Issues
-
-**Port already in use:**
-```bash
-lsof -i :8080
-docker compose down
-docker compose up -d
-```
-
-**Container not starting:**
-```bash
-docker compose logs
-docker ps -a
-```
-
-### AWS Deployment Issues
-
-**Check container status:**
-```bash
-ssh -i civic-extraction-key.pem ec2-user@13.217.205.13
-sudo docker ps
-sudo docker logs civic-extraction
-```
-
-**Restart container:**
-```bash
-sudo docker restart civic-extraction
-```
-
-**Test API locally on EC2:**
-```bash
-curl http://localhost/api/papers
-```
-
----
+This repository is the **primary (Claude Agent SDK)** implementation
+referenced in Section 6 (Code Availability) of the manuscript. All
+extraction and validation agents run Claude 3.5 Sonnet
+(`claude-3-5-sonnet-20241022`) with deterministic inference settings
+(`temperature=0.0`, `top_p=1.0`, fixed seed per Supplementary Note S3.4).
+A sibling implementation built on LangChain / LangGraph (which targets
+Fireworks AI GLM-4 / Qwen3-VL) lives at
+[Ali-Maq/oncocite-langchain](https://github.com/Ali-Maq/oncocite-langchain).
 
 ## Features
 
-- **Landing Page**: System overview with architecture diagrams
-- **Paper Explorer**: Browse 15 research papers
-- **PDF Viewer**: Built-in viewer with Range request support
-- **Evidence Extraction**: View extracted clinical evidence
-- **Knowledge Graph**: Interactive visualization
-- **Checkpoints**: Resume capability for all extraction phases
+- **Six-agent "Reader-first" architecture** — Reader → Orchestrator →
+  Planner → Extractor → Critic → Normalizer (Section 2.2, Supplementary
+  Figure S2)
+- **MCP server** — all 22 paper-spec tools (Supplementary Table S15)
+  exposed through `claude_agent_sdk.create_sdk_mcp_server`, defined in
+  [`tool_registry.py`](tool_registry.py)
+- **Source-grounded evidence** — verbatim quotes, page references,
+  0–1 confidence scores for every extracted item
+- **45-field JSON schema** — 25 Tier-1 extraction + 20 Tier-2
+  normalization fields (Supplementary Tables S17 and S18)
+- **Ontology normalization** — MyGene, MyVariant, EBI OLS
+  (DOID / NCIt / EFO / HPO), RxNorm, ClinicalTrials.gov (Supplementary
+  Table S21)
+- **Interactive web UI** — React 18 + Express.js viewer with side-by-side
+  PDF / evidence-card display and a knowledge-graph visualization
+  (Supplementary Figure S3)
 
----
+## Quick start — extraction pipeline
 
-## Tech Stack
-
-- **Frontend**: React + Vite + PDF.js
-- **Backend**: Node.js + Express
-- **Web Server**: Nginx
-- **Container**: Docker
-- **Deployment**: AWS EC2 + ECR
-- **Architecture**: ARM64 (Apple Silicon compatible)
-
----
-
-## Notes
-
-- **Firewall**: Corporate networks may block raw IPs. Access from personal network or use VPN.
-- **Cost**: Free tier eligible (t4g.micro). ~$5-7/month after 12 months.
-- **Data**: All PDFs and outputs included in Docker image.
-- **Logs**: Available in container at `/app/logs/api.log`
-
----
-
-## Quick Commands
+Requires Python 3.11+ and an Anthropic API key.
 
 ```bash
-# Local
-docker compose up -d                                    # Start
-docker compose logs -f                                   # View logs
-docker compose down                                      # Stop
+git clone https://github.com/Ali-Maq/civic-extraction-agent.git
+cd civic-extraction-agent
 
-# AWS
-ssh -i civic-extraction-key.pem ec2-user@13.217.205.13  # Connect
-sudo docker logs civic-extraction                        # View logs
-sudo docker restart civic-extraction                     # Restart
+pip install -r requirements.txt
+
+cp .env.example .env   # edit ANTHROPIC_API_KEY=sk-ant-...
+
+# Extract one of the bundled validation papers
+python run_extraction.py \
+    --input data/papers/PMID_18528420/PMID_18528420.pdf \
+    --output outputs/
 ```
 
----
+Outputs land in `outputs/{paper_id}_extraction.json` with the 45-field
+evidence-item schema documented in Supplementary Tables S17 and S18.
 
-**Live Application:** http://13.217.205.13
+## Quick start — web UI (local)
+
+```bash
+# Build and run both services (API + frontend) in Docker
+docker compose up -d
+
+# Visit the viewer
+open http://localhost:8080
+```
+
+See [`DEPLOYMENT.md`](DEPLOYMENT.md) for AWS deployment details
+(containerized on EC2 + ECR + EBS per Supplementary Figure S5).
+
+## Reproducing the validation metrics
+
+`data/papers/` bundles the full 15-paper validation corpus:
+
+- 10 retrospective Multiple Myeloma papers (`PMID_*`) — CIViC-indexed,
+  used for the three-way validation framework in Section 2.6 and Supp
+  Note S1
+- 5 prospective-application papers — Da Vià 2023 (Nature Medicine,
+  `s41591-023-02491-5`), Derrien 2023 (Nature Cancer,
+  `s43018-023-00625-9`), Dutta 2024 (Blood Neoplasia), Restrepo 2022
+  (JCO Precision Oncology), Elnaggar 2022 (J Hematol Oncol) — used for
+  the prospective application in Section 2.8
+
+Outputs and checkpoints for each paper live under `outputs/` and
+`outputs/checkpoints/`. Per-paper extraction metrics are summarized in
+Supplementary Table S4.
+
+## Repository layout
+
+```
+civic-extraction-agent/
+├── run_extraction.py        # Extraction pipeline CLI
+├── client.py                # Programmatic Claude Agent SDK client
+├── tool_registry.py         # MCP server with the 22 tools from Table S15
+├── tools/                   # Tool implementations
+├── config/                  # Settings and path resolution
+├── normalization/           # Variant annotators and ontology lookup logic
+├── schemas/                 # Pydantic models for the 45-field evidence schema
+├── hooks/                   # Session logging / audit trail
+├── scripts/                 # Batch runners, CIViC data loaders, evaluation
+├── frontend/                # React 18 + Vite 4 viewer (Supplementary Note S4)
+├── data/papers/             # 15-paper validation corpus
+├── outputs/                 # Per-paper extraction outputs + staged checkpoints
+├── final_papers/            # Manuscript source (LaTeX)
+├── Dockerfile, docker-compose.yml, deployment/   # Containerized deployment
+├── DEPLOYMENT.md            # AWS / EC2 deployment runbook
+├── requirements.txt         # Pinned dependencies
+└── pyproject.toml
+```
+
+## MCP server
+
+The 22-tool MCP server is declared in [`tool_registry.py`](tool_registry.py)
+through `claude_agent_sdk.create_sdk_mcp_server`. Agents call into the
+server over the Claude Agent SDK's internal MCP transport; external
+MCP-compatible clients can also attach by launching the server process
+directly. See Supplementary Table S15 for the complete tool list and
+agent assignments.
+
+## Live demonstration
+
+A public demo instance referenced in Supplementary Figure S5 is hosted
+at **http://13.217.205.13** (EC2 `t4g.micro`, `us-east-1`). The
+instance is intended for reviewer access and is not a production
+service.
+
+## Citation
+
+```
+Quidwai M., Thibaud S., Shasha D., Jagannath S., Parekh S., Laganà A.
+OncoCITE: Multimodal Multi-Agent Reconstruction of Clinical Oncology
+Knowledge Bases from Scientific Literature. Research Square (2026).
+DOI: 10.21203/rs.3.rs-9160944/v1
+```
+
+## License
+
+[MIT](LICENSE) — matching Section 6 (Code Availability) of the manuscript.

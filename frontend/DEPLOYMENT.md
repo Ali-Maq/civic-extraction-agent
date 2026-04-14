@@ -31,8 +31,8 @@ export KEY_PATH="~/.ssh/your-key.pem"  # Path to your SSH key
 Transfer the entire project to your EC2 instance:
 
 ```bash
-# From the parent directory (civic_extraction_end_to_end)
-cd /Users/ali/Downloads/civic/civic_extraction_end_to_end
+# From the project root
+cd /path/to/civic-extraction-agent
 tar -czf deployment.tar.gz --exclude='node_modules' --exclude='__pycache__' --exclude='.git' .
 scp -i $KEY_PATH deployment.tar.gz $EC2_USER@$EC2_HOST:~/
 ```
