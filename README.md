@@ -109,12 +109,34 @@ civic-extraction-agent/
 
 ## MCP server
 
-The 22-tool MCP server is declared in [`tool_registry.py`](tool_registry.py)
+The MCP server is declared in [`tool_registry.py`](tool_registry.py)
 through `claude_agent_sdk.create_sdk_mcp_server`. Agents call into the
 server over the Claude Agent SDK's internal MCP transport; external
 MCP-compatible clients can also attach by launching the server process
-directly. See Supplementary Table S15 for the complete tool list and
-agent assignments.
+directly.
+
+The server registers **all 22 tools listed in Supplementary Table S15**
+(`save_paper_content`, `get_paper_content`, `save_extraction_plan`,
+`get_extraction_plan`, `check_actionability`, `validate_evidence_item`,
+`save_evidence_items`, `get_evidence_items`, `save_critique`,
+`increment_iteration`, `lookup_gene_entrez`, `lookup_rxnorm`,
+`lookup_therapy_ncit`, `lookup_efo`, `lookup_disease_doid`,
+`lookup_clinical_trial`, `lookup_variant_info`, `save_final_output`,
+`get_workflow_status`, `log_agent_action`, `save_checkpoint`,
+`restore_checkpoint`) plus six auxiliary tools used by the primary
+implementation but not explicitly enumerated in Supp Table S15:
+
+| Auxiliary tool | Purpose |
+|---|---|
+| `get_paper_info` | Retrieve paper metadata (title, authors, journal, year) |
+| `read_paper_page` | Legacy per-page read; used during Reader debugging |
+| `get_tier2_coverage` | Report which Tier-2 fields are populated on the current draft |
+| `lookup_safety_profile` | OpenFDA/FAERS adverse-event lookup (Supp Table S21) |
+| `lookup_hpo` | Human Phenotype Ontology lookup (Supp Table S21) |
+| `lookup_pmcid` | NCBI ID converter PMID → PMC (Supp Table S21) |
+
+These six are a strict superset of Table S15 — they add helper lookups
+against the same external APIs already listed in Supp Table S21.
 
 ## Live demonstration
 
